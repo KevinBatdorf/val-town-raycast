@@ -1,8 +1,16 @@
 # Val Town
 
+View and run Vals from Raycast.
+
+## Features
+
+- View all your Vals
+- Search other Vals
+- View recent runs
+- Run a Val
+- Run arbitrary JS
+
 Get a token here: https://www.val.town/settings/api
 
-
-Note:
-- API shows less info on vals when queried via runs or user/id/vals than with /vals/id
-- API doesn't show number of inputs
+TODO: Add eval command
+TODO: Add a screenshot, etc
