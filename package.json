@@ -6,13 +6,16 @@
   "icon": "command-icon.png",
   "author": "KevinBatdorf",
   "categories": [
-    "Productivity"
+    "Productivity",
+    "Developer Tools",
+    "Fun",
+    "Web"
   ],
   "license": "MIT",
   "commands": [
     {
       "name": "search-vals",
-      "title": "Run Vals",
+      "title": "Search Vals",
       "subtitle": "Val Town",
       "description": "Search and run vals from your account and others.",
       "mode": "view"

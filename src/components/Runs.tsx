@@ -43,6 +43,7 @@ export const Runs = ({ runs, setShowDetail, isShowingDetail }: RunProps) => (
           detail={<ValDetails valId={val.id} />}
           accessories={[
             {
+              tooltip: `Last run at ${runStartAt}`,
               text: isShowingDetail ? undefined : formatDistance(new Date(runStartAt), new Date(), { addSuffix: true }),
             },
             {

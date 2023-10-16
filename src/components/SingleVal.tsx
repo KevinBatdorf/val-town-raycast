@@ -11,17 +11,24 @@ type SingleValProps = {
   val: Val | UserVal;
   isShowingDetail: boolean;
   includeVisibility?: boolean;
+  forceShowUsername?: boolean;
   onMainAction: () => void;
 };
 
-export const SingleVal = ({ val, isShowingDetail, onMainAction, includeVisibility = true }: SingleValProps) => {
+export const SingleVal = ({
+  val,
+  isShowingDetail,
+  onMainAction,
+  includeVisibility = true,
+  forceShowUsername = false,
+}: SingleValProps) => {
   const { name, author, id, public: p, privacy, runStartAt } = val;
   const icon = getAvatarIcon(name, { gradient: false });
   return (
     <List.Item
       key={`val-${id}`}
       title={name}
-      subtitle={isShowingDetail ? author.username : undefined}
+      subtitle={isShowingDetail || forceShowUsername ? author.username : undefined}
       icon={icon}
       actions={
         <ActionPanel>
@@ -39,7 +46,7 @@ export const SingleVal = ({ val, isShowingDetail, onMainAction, includeVisibilit
       detail={<ValDetails valId={id} />}
       accessories={[
         {
-          tooltip: "Last Run",
+          tooltip: `Last run at ${runStartAt}`,
           text: isShowingDetail ? undefined : formatDistance(new Date(runStartAt), new Date(), { addSuffix: true }),
         },
         {

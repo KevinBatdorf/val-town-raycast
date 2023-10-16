@@ -2,9 +2,9 @@ import { Action, ActionPanel, Form, useNavigation } from "@raycast/api";
 import { RunVal, UserVal, Val } from "../types";
 import { ValRun } from "./ValRun";
 
-export const ValRunWithArgs = ({ val, args }: { val: Val | RunVal | UserVal; args?: [] }) => {
+export const ValRunWithArgs = ({ val }: { val: Val | RunVal | UserVal }) => {
   const { push } = useNavigation();
-  const handleSubmit = ({ args }: { args: any }) => {
+  const handleSubmit = ({ args }: { args: string }) => {
     const values = args.split("\n").map((item: string) => {
       try {
         return JSON.parse(item);

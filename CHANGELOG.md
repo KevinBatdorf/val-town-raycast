@@ -1,3 +1,5 @@
 # val.town Changelog
 
-## [Initial Version] - 2023-10-14
+## [Added Val Town] - 2023-10-16
+
+Initial version code

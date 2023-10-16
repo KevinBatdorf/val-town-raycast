@@ -17,6 +17,7 @@ export const SearchedVals = ({ vals, isShowingDetail, setShowDetail }: SearchedV
           val={val}
           isShowingDetail={isShowingDetail}
           includeVisibility={false}
+          forceShowUsername={true}
           onMainAction={() => setShowDetail((visible) => !visible)}
         />
       ))}

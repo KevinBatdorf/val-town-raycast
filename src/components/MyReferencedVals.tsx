@@ -7,8 +7,8 @@ export const MyReferencedVals = () => {
   return (
     <List.Item
       id="my-referenced-vals"
-      icon={Icon.Megaphone}
-      title="My Referenced Vals"
+      icon={Icon.Link}
+      title="Vals Referencing Mine"
       actions={
         <ActionPanel>
           <Action.Push

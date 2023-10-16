@@ -7,7 +7,7 @@ import fetch from "node-fetch";
 
 const { apiToken } = getPreferenceValues();
 
-export const useRunApi = (username: Profile["username"], name: Val["name"], args = []) => {
+export const useRunApi = (username: Profile["username"], name: Val["name"], args: string[] = []) => {
   const abortable = useRef<AbortController>();
   const { isLoading, data, revalidate } = usePromise(
     async (url: string) => {
@@ -20,7 +20,11 @@ export const useRunApi = (username: Profile["username"], name: Val["name"], args
         },
         body: JSON.stringify({ args }),
       });
-      return (await response.json()) as any;
+      try {
+        return (await response.json()) as any;
+      } catch (e) {
+        return { error: e };
+      }
     },
     [`${API_URL}/run/${username}.${name}`],
     { abortable }

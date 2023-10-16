@@ -8,9 +8,7 @@ View and run Vals from Raycast.
 - Search other Vals
 - View recent runs
 - Run a Val
-- Run arbitrary JS
+- Pass in arguments
+- Run arbitrary JS/TS (coming soon)
 
 Get a token here: https://www.val.town/settings/api
-
-TODO: Add eval command
-TODO: Add a screenshot, etc

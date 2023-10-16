@@ -43,7 +43,7 @@ export const ValDetails = ({ valId }: { valId: Val["id"] }) => {
           {runStartAt ? (
             <List.Item.Detail.Metadata.Label
               title="Last Run by Author"
-              text={formatDistance(new Date(runStartAt), new Date(), { addSuffix: true })}
+              text={formatDistance(new Date(runStartAt), new Date(), { addSuffix: true }) + ` (${runStartAt})`}
             />
           ) : null}
           {runEndAt && runStartAt ? (
@@ -54,10 +54,10 @@ export const ValDetails = ({ valId }: { valId: Val["id"] }) => {
           ) : null}
           <List.Item.Detail.Metadata.TagList title="Metadata">
             {likeCount !== undefined ? (
-              <List.Item.Detail.Metadata.TagList.Item color={Color.Magenta} text={`Likes: ${likeCount}`} />
+              <List.Item.Detail.Metadata.TagList.Item color={Color.Green} text={`Likes: ${likeCount}`} />
             ) : null}
             {referenceCount !== undefined ? (
-              <List.Item.Detail.Metadata.TagList.Item color={Color.Orange} text={`References: ${referenceCount}`} />
+              <List.Item.Detail.Metadata.TagList.Item color={Color.Blue} text={`References: ${referenceCount}`} />
             ) : null}
           </List.Item.Detail.Metadata.TagList>
         </List.Item.Detail.Metadata>
