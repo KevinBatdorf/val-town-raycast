@@ -166,7 +166,7 @@ function SpecForm({ entry, onSave }: { entry: ToolEntry; onSave: (next: ToolEntr
         defaultValue={spec?.inputSchema ? JSON.stringify(spec.inputSchema, null, 2) : ""}
         enableMarkdown={false}
       />
-      <Form.Description text="A hand-edited spec survives syncing. Re-derive to go back to the README." />
+      <Form.Description text="Edits survive syncing until you re-derive." />
     </Form>
   );
 }
@@ -196,7 +196,7 @@ function TestRun({ entry }: { entry: ToolEntry }) {
         defaultValue={sampleArgs(entry.spec?.inputSchema ?? null)}
         enableMarkdown={false}
       />
-      <Form.Description text="JSON, matching the input schema. This really runs the val." />
+      <Form.Description text="This really runs the val." />
     </Form>
   );
 }

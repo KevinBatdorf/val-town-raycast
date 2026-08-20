@@ -5,10 +5,7 @@ import { executeTool as run } from "../lib/tools";
 type Input = {
   /** The tool's `name` exactly as list-tools returned it. Never guess this. */
   name: string;
-  /**
-   * The arguments, as a JSON object serialised to a string, matching the `inputSchema`
-   * list-tools gave for this tool. Omit it entirely when the schema was null.
-   */
+  /** The arguments as a JSON object string, matching the `inputSchema` from list-tools. */
   argumentsJson?: string;
 };
 

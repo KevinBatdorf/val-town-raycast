@@ -1,10 +1,7 @@
 import { syncTools } from "../lib/tools";
 
 type Input = {
-  /**
-   * Re-read every tool's source before answering, instead of serving cached specs. Only worth
-   * passing when a tool the user just changed looks out of date.
-   */
+  /** Re-read every tool's source instead of serving cached specs. */
   refresh?: boolean;
 };
 
@@ -33,7 +30,7 @@ export default async function listTools(input: Input): Promise<{ tools: ListedTo
   if (tools.length === 0) {
     return {
       tools: [],
-      note: "The user has no callable Val Town tools. They add one by tagging a val 'raycast-tool' in this extension's Search Vals command, and giving it an http file if it needs to take arguments.",
+      note: "The user has no callable Val Town tools. They add one by tagging a val 'raycast-tool' in this extension.",
     };
   }
 

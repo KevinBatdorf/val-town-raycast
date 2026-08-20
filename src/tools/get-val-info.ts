@@ -2,14 +2,9 @@ import { endpointOf, listFiles, readFile } from "../lib/api";
 import { loadState } from "../lib/store";
 
 type Input = {
-  /**
-   * The val to read, as `handle/valName`. A bare tool name from list-tools also works.
-   */
+  /** The val as `handle/valName`, or a tool name from list-tools. */
   val: string;
-  /**
-   * A single file to read in full, for example `main.tsx`. Omit it to get the file listing
-   * plus the val's README.
-   */
+  /** One file to read in full. Omit for the file listing and README. */
   path?: string;
 };
 

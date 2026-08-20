@@ -40,26 +40,26 @@
     {
       "name": "list-tools",
       "title": "List Val Town Tools",
-      "description": "List the tools the user has published from their Val Town account, with the input schema each one takes. Call this first whenever the user asks to run, trigger, or use one of their own vals, tools, scripts, or automations — it is the only way to learn which ones exist and what arguments they accept."
+      "description": "The user's callable Val Town tools and the arguments each takes. Call this before running any val of theirs."
     },
     {
       "name": "execute-tool",
       "title": "Execute Val Town Tool",
-      "description": "Run one of the user's Val Town tools and return its output. The tool name and its arguments must come from list-tools first; do not guess a name. Use this to actually do the thing the user asked for, rather than describing how."
+      "description": "Run one of the user's Val Town tools. Take the name and arguments from list-tools; never guess them."
     },
     {
       "name": "get-val-info",
       "title": "Get Val Town Val Info",
-      "description": "Read the files and source code of one val in the user's Val Town account. Use this only when the source itself matters — debugging a failing tool, explaining what a val does, or answering a question list-tools cannot. It is not needed to run a tool."
+      "description": "Read a val's files and source. Only when the source itself matters, such as debugging a failing tool."
     },
     {
       "name": "load-skill",
       "title": "Load Val Town Skill",
-      "description": "Load one of the user's own Val Town skills: a written guide that says which of their vals to call and in what order. Call this when the user names a skill or asks for a multi-step routine of theirs, then follow the returned instructions using execute-tool."
+      "description": "Load one of the user's own Val Town skills: a guide naming which vals to call and in what order."
     }
   ],
   "ai": {
-    "instructions": "The user keeps callable tools in their Val Town account. Start with list-tools to see what exists and what arguments each takes, then execute-tool to run one. Never invent a tool name or an argument the schema does not list. When the user names a skill, load-skill first and follow its instructions, calling execute-tool for each val it names."
+    "instructions": "Call list-tools for the user's tools and their arguments, then execute-tool to run one. Never invent a name or argument. For a named skill, load-skill first."
   },
   "preferences": [
     {
@@ -67,7 +67,7 @@
       "type": "password",
       "required": true,
       "title": "Val Town API Token",
-      "description": "Create one at val.town/settings/api. Needs read access, plus write if you want to tag vals as tools from Raycast.",
+      "description": "Create one at val.town/settings/api",
       "placeholder": "vt_..."
     }
   ],

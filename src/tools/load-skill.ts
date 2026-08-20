@@ -1,12 +1,9 @@
 import { findSkills } from "../lib/api";
 
 type Input = {
-  /**
-   * What the user is trying to do, or the skill's name if they gave one. Matched against the
-   * user's own skills.
-   */
+  /** What the user wants to do, or the skill name they gave. */
   query: string;
-  /** How many skills to return. One is usually right. */
+  /** How many skills to return. */
   limit?: number;
 };
 
@@ -20,7 +17,7 @@ export default async function loadSkill(input: Input) {
   if (personal.length === 0) {
     return {
       skills: [],
-      note: `No skill of the user's own matched "${input.query}". Their skills live in a val under skills/<name>/SKILL.md. Do not substitute a Val Town platform guide.`,
+      note: `No skill of the user's own matched "${input.query}". Do not substitute a Val Town platform guide.`,
     };
   }
 
@@ -30,6 +27,6 @@ export default async function loadSkill(input: Input) {
       description: skill.description,
       instructions: skill.content,
     })),
-    note: "Follow these instructions. Each val the skill names is called with execute-tool; check list-tools for its exact name and input schema first.",
+    note: "Follow these instructions. Call each val the skill names with execute-tool.",
   };
 }

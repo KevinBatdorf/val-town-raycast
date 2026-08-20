@@ -92,7 +92,7 @@ function QueryForm({ val, initialSql }: { val: string; initialSql: string }) {
         placeholder="SELECT * FROM …"
         enableMarkdown={false}
       />
-      <Form.Description text="Read-only. Edit data on val.town instead." />
+      <Form.Description text="Read-only." />
     </Form>
   );
 }
