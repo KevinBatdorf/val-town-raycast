@@ -23,7 +23,7 @@
       "name": "manage-tools",
       "title": "Manage Tools",
       "subtitle": "Val Town",
-      "description": "Review the vals you tagged as tools and the specs Raycast AI calls them with.",
+      "description": "Choose which vals and skills Raycast AI can call, and how each one behaves.",
       "mode": "view"
     },
     {

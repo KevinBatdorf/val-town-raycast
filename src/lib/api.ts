@@ -1,7 +1,5 @@
 import { callTool } from "./mcp";
 import type {
-  AllowedUser,
-  BypassToken,
   FindSkillsResponse,
   HistoryResponse,
   IntervalSettings,
@@ -19,13 +17,10 @@ import type {
   ValFile,
 } from "./types";
 
-export const TOOL_TAG = "raycast-tool";
-
 export type BlobStorage = { type: "val"; val: string } | { type: "deprecated_global"; org: string };
 
 export type ListValsOptions = {
   name?: string;
-  tag?: string;
   updatedAfter?: string;
   limit?: number;
   sortBy?: "updated" | "created" | "name";
@@ -37,10 +32,6 @@ export function listVals(options: ListValsOptions = {}, signal?: AbortSignal) {
 
 export function getValDetail(val: string, signal?: AbortSignal) {
   return callTool<ValDetailResponse>("get_val_detail", { val }, signal);
-}
-
-export function updateValTags(val: string, tags: string[]) {
-  return callTool<unknown>("update_val", { val, tags });
 }
 
 export function listFiles(val: string, options: { branch?: string; path?: string } = {}, signal?: AbortSignal) {
@@ -94,22 +85,6 @@ export function readBlob(storage: BlobStorage, key: string, signal?: AbortSignal
 
 export function storeBlob(storage: BlobStorage, key: string, content: string) {
   return callTool<unknown>("storeBlob", { key, content, storage });
-}
-
-export function listAllowedUsers(val: string, signal?: AbortSignal) {
-  return callTool<{ allowedUsers?: AllowedUser[]; users?: AllowedUser[]; count?: number }>(
-    "list_allowed_users",
-    { val },
-    signal,
-  );
-}
-
-export function listBypassTokens(val: string, signal?: AbortSignal) {
-  return callTool<{ tokens?: BypassToken[]; bypassTokens?: BypassToken[]; count?: number }>(
-    "list_bypass_tokens",
-    { val },
-    signal,
-  );
 }
 
 export function listOrgs(signal?: AbortSignal) {

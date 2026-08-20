@@ -29,7 +29,23 @@ export type ToolEntry = {
   /** A hand-edited spec survives syncing until the user re-derives it. */
   edited: boolean;
   derivedAt: string | null;
+  addedAt: string | null;
   error: string | null;
+};
+
+export type SkillEntry = {
+  val: string;
+  /** Always `skills/<name>/SKILL.md`. */
+  path: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  addedAt: string;
+};
+
+export type BuiltinEntry = {
+  enabled: boolean;
+  requiresConfirmation: boolean;
 };
 
 export type WatchedFile = {
@@ -39,16 +55,31 @@ export type WatchedFile = {
 };
 
 export type ExtensionState = {
-  version: 1;
+  version: 2;
   lastSync: string | null;
+  /** Keyed by `handle/valName`. This key set is the collection: nothing else decides membership. */
   tools: Record<string, ToolEntry>;
+  skills: Record<string, SkillEntry>;
+  builtins: Record<string, BuiltinEntry>;
   watchedFiles: WatchedFile[];
   /** Newest failure the user acknowledged, per file, so a restart does not re-badge it. */
   reportedFailures: Record<string, string>;
 };
 
 export function emptyState(): ExtensionState {
-  return { version: 1, lastSync: null, tools: {}, watchedFiles: [], reportedFailures: {} };
+  return {
+    version: 2,
+    lastSync: null,
+    tools: {},
+    skills: {},
+    builtins: {},
+    watchedFiles: [],
+    reportedFailures: {},
+  };
+}
+
+export function skillKey(val: string, path: string): string {
+  return `${val}:${path}`;
 }
 
 let cachedHandle: string | null = null;
@@ -80,10 +111,22 @@ export async function loadState(signal?: AbortSignal): Promise<ExtensionState> {
   if (!raw) return emptyState();
 
   try {
-    return { ...emptyState(), ...(JSON.parse(raw) as ExtensionState) };
+    return migrate(JSON.parse(raw) as Partial<ExtensionState>);
   } catch {
     return emptyState();
   }
+}
+
+/** Version 1 filled `tools` from the `raycast-tool` tag, so its entries are still the collection. */
+function migrate(stored: Partial<ExtensionState>): ExtensionState {
+  const tools = Object.fromEntries(
+    Object.entries(stored.tools ?? {}).map(([identifier, entry]) => [
+      identifier,
+      { ...entry, addedAt: entry.addedAt ?? entry.derivedAt ?? null },
+    ]),
+  );
+
+  return { ...emptyState(), ...stored, tools, version: 2 };
 }
 
 export async function saveState(state: ExtensionState): Promise<void> {

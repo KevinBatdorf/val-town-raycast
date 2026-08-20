@@ -1,5 +1,5 @@
 import { endpointOf, listFiles, readFile } from "../lib/api";
-import { loadState } from "../lib/store";
+import { requireBuiltin } from "../lib/builtins";
 
 type Input = {
   /** The val as `handle/valName`, or a tool name from list-tools. */
@@ -41,9 +41,9 @@ export default async function getValInfo(input: Input) {
 }
 
 async function resolveIdentifier(value: string): Promise<string> {
+  const state = await requireBuiltin("get-val-info");
   if (value.includes("/")) return value;
 
-  const state = await loadState();
   const match = Object.values(state.tools).find(
     (entry) => entry.spec?.name === value || entry.val.endsWith(`/${value}`),
   );

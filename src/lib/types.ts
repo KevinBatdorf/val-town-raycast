@@ -5,7 +5,6 @@ export type ValSummary = {
   name: string;
   identifier: string;
   description: string | null;
-  tags: string[];
   privacy: Privacy;
   httpPrivacy: "public" | "restricted";
   createdAt: string;
@@ -163,18 +162,6 @@ export type RunFileResponse = {
   code?: string;
   value?: unknown;
   logs?: { log: string; level: string }[];
-};
-
-export type AllowedUser = {
-  orgId: string;
-  handle: string;
-};
-
-export type BypassToken = {
-  publicId: string;
-  name?: string | null;
-  createdAt?: string;
-  revokedAt?: string | null;
 };
 
 export type Org = {

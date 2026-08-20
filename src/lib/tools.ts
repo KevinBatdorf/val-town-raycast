@@ -1,7 +1,7 @@
-import { endpointOf, listFiles, listVals, readFile, runFile, TOOL_TAG } from "./api";
+import { endpointOf, listFiles, listVals, readFile, runFile } from "./api";
 import { getPreferenceValues } from "@raycast/api";
 import { firstJsonSchema, leadParagraph, toolNameFor } from "./readme";
-import { loadState, saveState, type ExtensionState, type ToolEntry, type ToolSpec } from "./store";
+import { loadState, mutateState, saveState, type ExtensionState, type ToolEntry, type ToolSpec } from "./store";
 import type { FileType, ValFile, ValSummary } from "./types";
 
 export type SpecStatus = "ok" | "stale" | "no-schema" | "not-callable" | "failed";
@@ -57,102 +57,87 @@ export function statusOf(entry: ToolEntry): SpecStatus {
 export type SyncResult = {
   state: ExtensionState;
   derived: number;
-  removed: number;
 };
 
-/** The unfiltered tag list is needed as well: `updatedAfter` alone never reports a removal. */
+/** Membership is the blob's key set, so a sync only refreshes specs. It never adds or drops one. */
 export async function syncTools(options: { force?: boolean } = {}, signal?: AbortSignal): Promise<SyncResult> {
   const state = await loadState(signal);
+  const identifiers = Object.keys(state.tools);
+  if (identifiers.length === 0) return { state, derived: 0 };
+
   const startedAt = new Date().toISOString();
+  const full = options.force || !state.lastSync;
+  const { vals } = await listVals(full ? {} : { updatedAfter: state.lastSync ?? undefined }, signal);
 
-  const { vals } = await listVals({ tag: TOOL_TAG }, signal);
-
-  let staleIds: Set<string>;
-  if (options.force || !state.lastSync) {
-    staleIds = new Set(vals.map((val) => val.identifier));
-  } else {
-    const changed = await listVals({ tag: TOOL_TAG, updatedAfter: state.lastSync }, signal);
-    staleIds = new Set(changed.vals.map((val) => val.identifier));
-  }
-
-  const cached: Record<string, ToolEntry> = {};
-  const toDerive: ValSummary[] = [];
-
-  for (const val of vals) {
+  const stale = vals.filter((val) => val.identifier in state.tools);
+  const toDerive = stale.filter((val) => {
     const existing = state.tools[val.identifier];
     // An entry that failed last time is retried, not cached — otherwise its error sticks forever.
-    const reusable = existing?.spec && !existing.error && (existing.edited || !staleIds.has(val.identifier));
-
-    if (reusable && existing) {
-      cached[val.identifier] = refreshMetadata(existing, val);
-    } else {
-      toDerive.push(val);
-    }
-  }
+    if (!existing.spec || existing.error) return true;
+    return !existing.edited;
+  });
 
   // Two round trips per val, so a first sync of a dozen tools serialises into two dozen waits.
   const freshlyDerived = await Promise.all(
     toDerive.map(async (val): Promise<[string, ToolEntry, boolean]> => {
       const existing = state.tools[val.identifier];
-      const shared = {
-        val: val.identifier,
-        enabled: existing?.enabled ?? true,
-        requiresConfirmation: existing?.requiresConfirmation ?? false,
-      };
 
       try {
         const spec = await deriveSpec(val, signal);
-        return [val.identifier, { ...shared, spec, edited: false, derivedAt: startedAt, error: null }, true];
+        return [val.identifier, { ...existing, spec, edited: false, derivedAt: startedAt, error: null }, true];
       } catch (error) {
         return [
           val.identifier,
-          {
-            ...shared,
-            spec: existing?.spec ?? null,
-            edited: existing?.edited ?? false,
-            derivedAt: existing?.derivedAt ?? null,
-            error: error instanceof Error ? error.message : "Could not read this val",
-          },
+          { ...existing, error: error instanceof Error ? error.message : "Could not read this val" },
           false,
         ];
       }
     }),
   );
 
-  const tools: Record<string, ToolEntry> = { ...cached };
+  const tools: Record<string, ToolEntry> = { ...state.tools };
   let derived = 0;
   for (const [identifier, entry, succeeded] of freshlyDerived) {
     tools[identifier] = entry;
     if (succeeded) derived += 1;
   }
 
-  const removed = Object.keys(state.tools).filter((identifier) => !(identifier in tools)).length;
   const next: ExtensionState = { ...state, tools, lastSync: startedAt };
 
   // A sync that found nothing new should cost one read, not a read and a write.
-  if (derived > 0 || removed > 0 || JSON.stringify(state.tools) !== JSON.stringify(tools)) {
+  if (derived > 0 || JSON.stringify(state.tools) !== JSON.stringify(tools)) {
     await saveState(next);
-    return { state: next, derived, removed };
+    return { state: next, derived };
   }
 
-  return { state, derived, removed };
+  return { state, derived };
 }
 
-/** A description-only edit never moves the val's timestamp, so it never lands in the stale subset. */
-function refreshMetadata(entry: ToolEntry, val: ValSummary): ToolEntry {
-  if (!entry.spec || entry.edited) return entry;
-  const spec = entry.spec;
-  if (spec.descriptionSource === "readme") return entry;
-
+export function newToolEntry(val: ValSummary, spec: ToolSpec | null, addedAt: string): ToolEntry {
   return {
-    ...entry,
-    spec: {
-      ...spec,
-      name: toolNameFor(val.name),
-      description: val.description ?? spec.description,
-      restricted: val.httpPrivacy === "restricted",
-    },
+    val: val.identifier,
+    spec,
+    enabled: true,
+    requiresConfirmation: true,
+    edited: false,
+    derivedAt: spec ? addedAt : null,
+    addedAt,
+    error: null,
   };
+}
+
+/** Re-adding a collected val must not reset the switches the user already chose. */
+export async function prepareEntry(val: ValSummary, existing?: ToolEntry): Promise<ToolEntry> {
+  const spec = await deriveSpec(val);
+  return { ...newToolEntry(val, spec, new Date().toISOString()), ...existing, spec };
+}
+
+export async function removeTool(identifier: string): Promise<ExtensionState> {
+  return mutateState((state) => {
+    const tools = { ...state.tools };
+    delete tools[identifier];
+    return { ...state, tools };
+  });
 }
 
 export type ExecutionResult = {

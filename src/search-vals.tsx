@@ -1,9 +1,12 @@
-import { Action, ActionPanel, Color, Icon, List, Toast, showToast, Keyboard } from "@raycast/api";
+import { Action, ActionPanel, Color, Icon, Keyboard, List, Toast, showToast, useNavigation } from "@raycast/api";
 import { useCachedPromise, useCachedState } from "@raycast/utils";
-import { useCallback, useState } from "react";
-import { listVals, TOOL_TAG, updateValTags } from "./lib/api";
+import { useState } from "react";
+import { listVals } from "./lib/api";
 import { errorMessage, privacyIcon } from "./lib/format";
+import { loadState, type ToolEntry } from "./lib/store";
+import { prepareEntry, removeTool } from "./lib/tools";
 import type { ValSummary } from "./lib/types";
+import { ToolForm } from "./views/ToolForm";
 import { ValDetail } from "./views/ValDetail";
 
 type Scope = "vals" | "tools";
@@ -13,18 +16,16 @@ export default function SearchVals() {
   const [scope, setScope] = useCachedState<Scope>("search-scope", "vals");
 
   const { data, isLoading, error, revalidate } = useCachedPromise(
-    async (text: string, currentScope: Scope) => {
-      const response = await listVals({
-        name: text.trim() || undefined,
-        tag: currentScope === "tools" ? TOOL_TAG : undefined,
-      });
-      return response.vals;
+    async (text: string) => {
+      const [{ vals }, state] = await Promise.all([listVals({ name: text.trim() || undefined }), loadState()]);
+      return { vals, collected: state.tools };
     },
-    [searchText, scope],
-    { keepPreviousData: true, initialData: [] },
+    [searchText],
+    { keepPreviousData: true },
   );
 
-  const vals = data ?? [];
+  const collected = data?.collected ?? {};
+  const vals = (data?.vals ?? []).filter((val) => scope === "vals" || val.identifier in collected);
 
   return (
     <List
@@ -32,7 +33,7 @@ export default function SearchVals() {
       searchText={searchText}
       onSearchTextChange={setSearchText}
       throttle
-      searchBarPlaceholder={scope === "tools" ? `Search vals tagged ${TOOL_TAG}` : "Search your vals"}
+      searchBarPlaceholder={scope === "tools" ? "Search the vals you added as tools" : "Search your vals"}
       searchBarAccessory={
         <List.Dropdown tooltip="Scope" value={scope} onChange={(value) => setScope(value as Scope)}>
           <List.Dropdown.Item title="Vals" value="vals" icon={Icon.Code} />
@@ -55,15 +56,11 @@ export default function SearchVals() {
         <>
           <List.EmptyView
             icon={scope === "tools" ? Icon.Stars : Icon.MagnifyingGlass}
-            title={scope === "tools" ? "No vals tagged as tools" : "No vals found"}
-            description={
-              scope === "tools"
-                ? `Tag a val ${TOOL_TAG} to make it callable from Raycast AI.`
-                : "Try a different search."
-            }
+            title={scope === "tools" ? "No vals added as tools" : "No vals found"}
+            description={scope === "tools" ? "Add one with ⌘T here, or from Manage Tools." : "Try a different search."}
           />
           {vals.map((val) => (
-            <ValRow key={val.id} val={val} onChanged={revalidate} />
+            <ValRow key={val.id} val={val} entry={collected[val.identifier]} onChanged={revalidate} />
           ))}
         </>
       )}
@@ -71,23 +68,36 @@ export default function SearchVals() {
   );
 }
 
-function ValRow({ val, onChanged }: { val: ValSummary; onChanged: () => void }) {
-  const isTool = val.tags.includes(TOOL_TAG);
+function ValRow({ val, entry, onChanged }: { val: ValSummary; entry?: ToolEntry; onChanged: () => void }) {
+  const { push } = useNavigation();
+  const isTool = entry !== undefined;
 
-  const toggleTag = useCallback(async () => {
-    const toast = await showToast({ style: Toast.Style.Animated, title: isTool ? "Removing tag" : "Adding tag" });
+  async function add() {
+    const toast = await showToast({ style: Toast.Style.Animated, title: `Reading ${val.name}` });
     try {
-      const tags = isTool ? val.tags.filter((tag) => tag !== TOOL_TAG) : [...val.tags, TOOL_TAG];
-      await updateValTags(val.identifier, tags);
+      const prepared = await prepareEntry(val, entry);
+      toast.hide();
+      push(<ToolForm entry={prepared} onSaved={onChanged} />);
+    } catch (error) {
+      toast.style = Toast.Style.Failure;
+      toast.title = "Could not read this val";
+      toast.message = errorMessage(error);
+    }
+  }
+
+  async function remove() {
+    const toast = await showToast({ style: Toast.Style.Animated, title: "Removing" });
+    try {
+      await removeTool(val.identifier);
       toast.style = Toast.Style.Success;
-      toast.title = isTool ? `Removed ${TOOL_TAG}` : `Tagged ${TOOL_TAG}`;
+      toast.title = `Removed ${val.name}`;
       onChanged();
     } catch (error) {
       toast.style = Toast.Style.Failure;
-      toast.title = "Could not update tags";
+      toast.title = "Could not remove";
       toast.message = errorMessage(error);
     }
-  }, [isTool, val.identifier, val.tags, onChanged]);
+  }
 
   return (
     <List.Item
@@ -96,7 +106,6 @@ function ValRow({ val, onChanged }: { val: ValSummary; onChanged: () => void }) 
       subtitle={val.description ?? undefined}
       accessories={[
         ...(isTool ? [{ tag: { value: "tool", color: Color.Purple } }] : []),
-        ...val.tags.filter((tag) => tag !== TOOL_TAG).map((tag) => ({ tag })),
         { date: new Date(val.createdAt), tooltip: `Created ${new Date(val.createdAt).toLocaleString()}` },
       ]}
       actions={
@@ -107,11 +116,22 @@ function ValRow({ val, onChanged }: { val: ValSummary; onChanged: () => void }) 
           </ActionPanel.Section>
           <ActionPanel.Section>
             <Action
-              title={isTool ? `Remove ${TOOL_TAG} Tag` : `Tag as ${TOOL_TAG}`}
-              icon={isTool ? Icon.StarDisabled : Icon.Stars}
+              title={isTool ? "Edit Tool Details" : "Add as Tool"}
+              icon={Icon.Stars}
               shortcut={{ modifiers: ["cmd"], key: "t" }}
-              onAction={toggleTag}
+              onAction={add}
             />
+            {isTool ? (
+              <Action
+                title="Remove from Tools"
+                icon={Icon.Trash}
+                style={Action.Style.Destructive}
+                shortcut={Keyboard.Shortcut.Common.Remove}
+                onAction={remove}
+              />
+            ) : null}
+          </ActionPanel.Section>
+          <ActionPanel.Section>
             <Action.CopyToClipboard
               title="Copy Identifier"
               content={val.identifier}

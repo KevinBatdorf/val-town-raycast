@@ -1,39 +1,64 @@
-import { Action, ActionPanel, Color, Icon, List, Toast, showToast } from "@raycast/api";
+import { Action, ActionPanel, Color, Icon, Keyboard, List, Toast, showToast, useNavigation } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { getValDetail, listVals, TOOL_TAG, updateValTags, webUrlFor } from "../lib/api";
+import { getValDetail, listVals, webUrlFor } from "../lib/api";
 import { errorMessage, formatDateTime, privacyIcon } from "../lib/format";
-import { AccessList } from "./AccessList";
+import { loadState } from "../lib/store";
+import { prepareEntry, removeTool } from "../lib/tools";
 import { BlobList } from "./BlobList";
 import { FileList } from "./FileList";
 import { HistoryList } from "./HistoryList";
 import { SqliteQuery } from "./SqliteQuery";
+import { ToolForm } from "./ToolForm";
 
 export function ValDetail({ identifier }: { identifier: string }) {
+  const { push } = useNavigation();
   const { data, isLoading, error, revalidate } = useCachedPromise(
     async (val: string) => {
-      const [detail, membership] = await Promise.all([getValDetail(val), listVals({ name: val.split("/")[1] })]);
+      // `get_val_detail` returns no description, so the summary supplies it.
+      const [detail, membership, state] = await Promise.all([
+        getValDetail(val),
+        listVals({ name: val.split("/")[1] }),
+        loadState(),
+      ]);
       const summary = membership.vals.find((candidate) => candidate.identifier === val);
-      return { detail, tags: summary?.tags ?? [], description: summary?.description ?? null };
+      return { detail, summary, entry: state.tools[val] };
     },
     [identifier],
   );
 
   const detail = data?.detail;
-  const tags = data?.tags ?? [];
-  const isTool = tags.includes(TOOL_TAG);
-  const branch = detail?.branches.items[0]?.name ?? "main";
+  const entry = data?.entry;
+  const isTool = entry !== undefined;
+  const branches = detail?.branches?.items ?? [];
+  const branchCount = detail?.branches?.count ?? branches.length;
+  const branch = branches[0]?.name ?? "main";
 
-  async function toggleTag() {
-    const toast = await showToast({ style: Toast.Style.Animated, title: isTool ? "Removing tag" : "Adding tag" });
+  async function addAsTool() {
+    const summary = data?.summary;
+    if (!summary) return;
+
+    const toast = await showToast({ style: Toast.Style.Animated, title: `Reading ${summary.name}` });
     try {
-      const next = isTool ? tags.filter((tag) => tag !== TOOL_TAG) : [...tags, TOOL_TAG];
-      await updateValTags(identifier, next);
+      const prepared = await prepareEntry(summary, entry);
+      toast.hide();
+      push(<ToolForm entry={prepared} onSaved={revalidate} />);
+    } catch (mutationError) {
+      toast.style = Toast.Style.Failure;
+      toast.title = "Could not read this val";
+      toast.message = errorMessage(mutationError);
+    }
+  }
+
+  async function removeAsTool() {
+    const toast = await showToast({ style: Toast.Style.Animated, title: "Removing" });
+    try {
+      await removeTool(identifier);
       toast.style = Toast.Style.Success;
-      toast.title = isTool ? `Removed ${TOOL_TAG}` : `Tagged ${TOOL_TAG}`;
+      toast.title = "Removed from tools";
       revalidate();
     } catch (mutationError) {
       toast.style = Toast.Style.Failure;
-      toast.title = "Could not update tags";
+      toast.title = "Could not remove";
       toast.message = errorMessage(mutationError);
     }
   }
@@ -56,21 +81,30 @@ export function ValDetail({ identifier }: { identifier: string }) {
         <List.Item
           icon={detail ? privacyIcon(detail.privacy) : Icon.Circle}
           title={identifier}
-          subtitle={data?.description ?? undefined}
+          subtitle={data?.summary?.description ?? undefined}
           accessories={[
             ...(isTool ? [{ tag: { value: "tool", color: Color.Purple } }] : []),
             { tag: detail?.privacy ?? "…" },
-            { text: `${detail?.branches.count ?? 0} branch${detail?.branches.count === 1 ? "" : "es"}` },
+            { text: `${branchCount} branch${branchCount === 1 ? "" : "es"}` },
           ]}
           actions={
             <ActionPanel>
               <Action.OpenInBrowser title="Open on Val Town" url={detail?.htmlUrl ?? webUrlFor(identifier)} />
               <Action
-                title={isTool ? `Remove ${TOOL_TAG} Tag` : `Tag as ${TOOL_TAG}`}
-                icon={isTool ? Icon.StarDisabled : Icon.Stars}
+                title={isTool ? "Edit Tool Details" : "Add as Tool"}
+                icon={Icon.Stars}
                 shortcut={{ modifiers: ["cmd"], key: "t" }}
-                onAction={toggleTag}
+                onAction={addAsTool}
               />
+              {isTool ? (
+                <Action
+                  title="Remove from Tools"
+                  icon={Icon.Trash}
+                  style={Action.Style.Destructive}
+                  shortcut={Keyboard.Shortcut.Common.Remove}
+                  onAction={removeAsTool}
+                />
+              ) : null}
               <Action.CopyToClipboard title="Copy Identifier" content={identifier} />
             </ActionPanel>
           }
@@ -105,17 +139,11 @@ export function ValDetail({ identifier }: { identifier: string }) {
           subtitle="This val's blob storage"
           target={<BlobList val={identifier} />}
         />
-        <NavigationRow
-          icon={Icon.Key}
-          title="Access"
-          subtitle="Granted orgs and bypass tokens"
-          target={<AccessList val={identifier} />}
-        />
       </List.Section>
 
-      {detail && detail.branches.count > 1 ? (
+      {branchCount > 1 ? (
         <List.Section title="Branches">
-          {detail.branches.items.map((item) => (
+          {branches.map((item) => (
             <List.Item
               key={item.name}
               icon={Icon.Tree}

@@ -1,5 +1,6 @@
 import type { Tool } from "@raycast/api";
-import { loadState, type ToolEntry } from "../lib/store";
+import { builtinSettings, requireBuiltin } from "../lib/builtins";
+import { type ToolEntry } from "../lib/store";
 import { executeTool as run } from "../lib/tools";
 
 type Input = {
@@ -10,7 +11,7 @@ type Input = {
 };
 
 export default async function executeTool(input: Input) {
-  const entry = await resolve(input.name);
+  const { entry } = await resolve(input.name);
   const args = parseArgs(input.argumentsJson);
   const result = await run(entry, args);
 
@@ -26,8 +27,8 @@ export default async function executeTool(input: Input) {
 }
 
 export const confirmation: Tool.Confirmation<Input> = async (input) => {
-  const entry = await resolve(input.name);
-  if (!entry.requiresConfirmation) return undefined;
+  const { entry, always } = await resolve(input.name);
+  if (!always && !entry.requiresConfirmation) return undefined;
 
   return {
     title: `Run ${entry.spec?.name ?? entry.val}?`,
@@ -39,8 +40,9 @@ export const confirmation: Tool.Confirmation<Input> = async (input) => {
   };
 };
 
-async function resolve(name: string): Promise<ToolEntry> {
-  const state = await loadState();
+/** Either switch asking is enough: the built-in one covers every val, a val's own covers itself. */
+async function resolve(name: string): Promise<{ entry: ToolEntry; always: boolean }> {
+  const state = await requireBuiltin("execute-tool");
   const entries = Object.values(state.tools).filter((entry) => entry.enabled);
 
   const match =
@@ -50,9 +52,9 @@ async function resolve(name: string): Promise<ToolEntry> {
 
   if (!match) {
     const available = entries.map((entry) => entry.spec?.name ?? entry.val).join(", ");
-    throw new Error(`No enabled Val Town tool called "${name}". Available: ${available || "none"}.`);
+    throw new Error(`No active Val Town tool called "${name}". Available: ${available || "none"}.`);
   }
-  return match;
+  return { entry: match, always: builtinSettings(state, "execute-tool").requiresConfirmation };
 }
 
 function parseArgs(raw: string | undefined): Record<string, unknown> | undefined {

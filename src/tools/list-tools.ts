@@ -1,3 +1,4 @@
+import { builtinSettings } from "../lib/builtins";
 import { syncTools } from "../lib/tools";
 
 type Input = {
@@ -14,8 +15,10 @@ type ListedTool = {
 };
 
 export default async function listTools(input: Input): Promise<{ tools: ListedTool[]; note?: string }> {
-  // Reading the cache instead would leave a val tagged a minute ago uncallable.
+  // Reading the cache instead would leave a val edited a minute ago running its old spec.
   const { state } = await syncTools({ force: input.refresh === true });
+
+  const alwaysConfirms = builtinSettings(state, "execute-tool").requiresConfirmation;
 
   const tools = Object.values(state.tools)
     .filter((entry) => entry.enabled && entry.spec?.filePath)
@@ -24,13 +27,13 @@ export default async function listTools(input: Input): Promise<{ tools: ListedTo
       description: entry.spec?.description ?? "",
       val: entry.val,
       inputSchema: entry.spec?.inputSchema ?? null,
-      requiresConfirmation: entry.requiresConfirmation,
+      requiresConfirmation: alwaysConfirms || entry.requiresConfirmation,
     }));
 
   if (tools.length === 0) {
     return {
       tools: [],
-      note: "The user has no callable Val Town tools. They add one by tagging a val 'raycast-tool' in this extension.",
+      note: "The user has no callable Val Town tools. They add one with Add Tool in this extension's Manage Tools.",
     };
   }
 
