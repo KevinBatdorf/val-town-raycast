@@ -28,7 +28,7 @@ import { SqliteQuery } from "./SqliteQuery";
 export function ValDetail({ identifier }: { identifier: string }) {
   const { push } = useNavigation();
 
-  const { data, isLoading, error, mutate } = useCachedPromise(
+  const { data, isLoading, error, mutate, revalidate } = useCachedPromise(
     async (val: string) => {
       /**
        * `list_vals` is the source for the val's own fields: it has reliably carried description,
@@ -87,7 +87,8 @@ export function ValDetail({ identifier }: { identifier: string }) {
         member={isTool}
         preloaded={register ? undefined : config}
         valDescription={summary?.description ?? detail?.description}
-        onSaved={() => mutate()}
+        // mutate rethrows if the refetch fails; falling back to revalidate turns that into error state.
+        onSaved={() => void mutate().catch(() => revalidate())}
       />,
     );
   }
