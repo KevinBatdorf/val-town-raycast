@@ -13,7 +13,7 @@ import {
 import { useCachedPromise } from "@raycast/utils";
 import { getValDetail, listVals, setPrivacy, webUrlFor } from "../lib/api";
 import { appAccessColor, errorMessage, formatDateTime, privacyColor } from "../lib/format";
-import { cachedReadme } from "../lib/cache";
+import { cacheVal, cachedReadme, cachedVal } from "../lib/cache";
 import { loadReadme } from "../lib/readme";
 import { loadState } from "../lib/store";
 import type { Privacy } from "../lib/types";
@@ -47,6 +47,13 @@ export function ValDetail({ identifier }: { identifier: string }) {
 
       const summary = summaries.vals.find((candidate) => candidate.identifier === val);
       const config = state.tools[val] ? await readValConfig(val).catch(() => null) : null;
+
+      if (detail.result) {
+        const branches = detail.result.branches.items;
+        const main = branches.find((branch) => branch.name === "main") ?? branches[0];
+        cacheVal(val, { version: main?.version ?? -1, detail: detail.result });
+      }
+
       return { summary, detail: detail.result, detailError: detail.error, entry: state.tools[val], config };
     },
     [identifier],
@@ -59,7 +66,8 @@ export function ValDetail({ identifier }: { identifier: string }) {
   });
 
   const summary = data?.summary;
-  const detail = data?.detail;
+  // The hover-warmed bucket paints the pane while the fresh fetch (the staleness check) runs.
+  const detail = data?.detail ?? cachedVal(identifier)?.detail;
   const config = data?.config ?? null;
   const isTool = data?.entry !== undefined;
   const argumentCount = Object.keys(config?.inputSchema?.properties ?? {}).length;

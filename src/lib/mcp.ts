@@ -22,6 +22,7 @@ type JsonRpcResponse = {
 
 async function rpc(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
   const { apiToken } = getPreferenceValues<Preferences>();
+  const id = ++requestId;
 
   let response: Response;
   try {
@@ -32,7 +33,7 @@ async function rpc(method: string, params: unknown, signal?: AbortSignal): Promi
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
       },
-      body: JSON.stringify({ jsonrpc: "2.0", id: ++requestId, method, params }),
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
       signal,
     });
   } catch (error) {
@@ -50,7 +51,7 @@ async function rpc(method: string, params: unknown, signal?: AbortSignal): Promi
     throw new McpError(body.slice(0, 400) || `Val Town returned ${response.status}`, response.status);
   }
 
-  const envelope = parseEventStream(body) as JsonRpcResponse;
+  const envelope = parseEventStream(body, id) as JsonRpcResponse;
   if (envelope.error) throw new McpError(envelope.error.message ?? "Val Town returned an error");
   return envelope.result;
 }

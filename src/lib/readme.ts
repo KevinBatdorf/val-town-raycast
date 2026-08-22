@@ -1,5 +1,5 @@
-import { listFiles, readFile } from "./api";
-import { cacheReadme, cachedReadme } from "./cache";
+import { getValDetail, listFiles, readFile } from "./api";
+import { cacheReadme, cacheVal, cachedReadme, cachedVal } from "./cache";
 
 /**
  * A val's README, read straight through the cache. `list_files` carries a per-file `version`, so the
@@ -23,11 +23,30 @@ export async function loadReadme(val: string, signal?: AbortSignal): Promise<str
   return content || null;
 }
 
+/** Once per process per val: hovering the same row twice should not re-check anything. */
+const checked = new Set<string>();
+
 /**
- * Warms an empty cache for a val the user has only hovered over. A val already in the cache costs
- * nothing here: opening it is what re-checks the version.
+ * Warms the val's cache from a hover. One `get_val_detail` is the staleness check: its main-branch
+ * version moves on every commit, so a matching version means the cached detail and README are still
+ * current and nothing else is fetched. A failed check serves the cache rather than clearing it.
  */
-export function prefetchReadme(val: string): void {
-  if (cachedReadme(val)) return;
-  void loadReadme(val).catch(() => undefined);
+export function prefetchVal(val: string): void {
+  if (checked.has(val)) return;
+  checked.add(val);
+
+  void (async () => {
+    const detail = await getValDetail(val).catch(() => null);
+    if (!detail) return;
+
+    const main = detail.branches.items.find((branch) => branch.name === "main") ?? detail.branches.items[0];
+    const version = main?.version ?? -1;
+
+    if (cachedVal(val)?.version !== version) {
+      cacheVal(val, { version, detail });
+      await loadReadme(val).catch(() => undefined);
+    } else if (!cachedReadme(val)) {
+      await loadReadme(val).catch(() => undefined);
+    }
+  })();
 }

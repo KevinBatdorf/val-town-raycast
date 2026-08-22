@@ -1,5 +1,6 @@
 import { Cache } from "@raycast/api";
 import { normalizeState, type ExtensionState } from "./store";
+import type { ValDetailResponse } from "./types";
 import type { ValConfig } from "./valconfig";
 
 /**
@@ -55,4 +56,18 @@ export function cachedReadme(val: string): CachedReadme | undefined {
 
 export function cacheReadme(val: string, entry: CachedReadme): void {
   cache.set(`readme:${val}`, JSON.stringify(entry));
+}
+
+/**
+ * A val's detail, keyed by its main branch version — the number that moves on every commit. A
+ * matching version means everything derived from the val's code is still current.
+ */
+type CachedVal = { version: number; detail: ValDetailResponse };
+
+export function cachedVal(val: string): CachedVal | undefined {
+  return read<CachedVal>(`val:${val}`);
+}
+
+export function cacheVal(val: string, entry: CachedVal): void {
+  cache.set(`val:${val}`, JSON.stringify(entry));
 }

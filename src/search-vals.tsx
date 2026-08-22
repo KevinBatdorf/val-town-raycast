@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listVals, setPrivacy, webUrlFor } from "./lib/api";
 import { cacheConfigs, cachedConfigs, cachedState } from "./lib/cache";
 import { appAccessColor, errorMessage, privacyColor } from "./lib/format";
-import { prefetchReadme } from "./lib/readme";
+import { prefetchVal } from "./lib/readme";
 import { loadState, normalizeState, type ExtensionState } from "./lib/store";
 import type { Privacy, ValSummary } from "./lib/types";
 import { readConfigs, readValConfig, writeValConfig, type ValConfig } from "./lib/valconfig";
@@ -236,7 +236,7 @@ export default function SearchVals() {
       searchText={searchText}
       onSearchTextChange={setSearchText}
       onSelectionChange={(id) => {
-        if (id) prefetchReadme(id);
+        if (id) prefetchVal(id);
       }}
       throttle
       searchBarPlaceholder={showTools ? "Filter the vals you allowed" : "Search your vals"}
