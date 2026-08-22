@@ -28,6 +28,7 @@ export type Branch = {
 export type ValDetailResponse = {
   identifier: string;
   name: string;
+  description: string | null;
   privacy: Privacy;
   httpPrivacy: "public" | "restricted";
   createdAt: string;
@@ -86,7 +87,7 @@ export type TracesResponse = {
   traces: TraceEntry[];
 };
 
-export type LogEntry = {
+type LogEntry = {
   timestamp: string;
   level: string;
   body: string;
@@ -164,7 +165,7 @@ export type RunFileResponse = {
   logs?: { log: string; level: string }[];
 };
 
-export type Org = {
+type Org = {
   id: string;
   handle: string;
   displayName: string | null;
@@ -176,16 +177,4 @@ export type Org = {
 export type ListOrgsResponse = {
   user: { id: string; handle: string };
   orgs: Org[];
-};
-
-export type Skill = {
-  name: string;
-  description: string;
-  content: string;
-  source: "official" | "personal" | string;
-};
-
-export type FindSkillsResponse = {
-  query: string;
-  matches: Skill[];
 };

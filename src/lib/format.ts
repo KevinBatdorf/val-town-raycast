@@ -18,15 +18,24 @@ export function fileIcon(type: FileType): { source: Icon; tintColor?: Color } {
   }
 }
 
-export function privacyIcon(privacy: Privacy): Icon {
+/** Private is the quiet default and gets no label; the other two say how far the code reaches. */
+export function privacyColor(privacy: Privacy): Color | undefined {
   switch (privacy) {
-    case "private":
-      return Icon.Lock;
+    case "public":
+      return Color.Green;
     case "unlisted":
-      return Icon.EyeDisabled;
+      return Color.Yellow;
     default:
-      return Icon.Globe;
+      return undefined;
   }
+}
+
+/**
+ * Its own pair of hues. Green and yellow belong to code visibility, orange to must-confirm, purple
+ * to agent access and red to a broken config — so app access gets blue and magenta.
+ */
+export function appAccessColor(appAccess: "public" | "restricted"): Color {
+  return appAccess === "restricted" ? Color.Magenta : Color.Blue;
 }
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
@@ -44,7 +53,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   sql: "sql",
 };
 
-export function languageFor(path: string): string {
+function languageFor(path: string): string {
   const extension = path.split(".").pop()?.toLowerCase() ?? "";
   return LANGUAGE_BY_EXTENSION[extension] ?? "";
 }

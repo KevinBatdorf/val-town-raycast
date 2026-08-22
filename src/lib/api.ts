@@ -1,6 +1,6 @@
-import { callTool } from "./mcp";
+import { callTool, callToolVoid } from "./mcp";
 import type {
-  FindSkillsResponse,
+  Privacy,
   HistoryResponse,
   IntervalSettings,
   ListBlobsResponse,
@@ -19,7 +19,7 @@ import type {
 
 export type BlobStorage = { type: "val"; val: string } | { type: "deprecated_global"; org: string };
 
-export type ListValsOptions = {
+type ListValsOptions = {
   name?: string;
   updatedAfter?: string;
   limit?: number;
@@ -28,6 +28,15 @@ export type ListValsOptions = {
 
 export function listVals(options: ListValsOptions = {}, signal?: AbortSignal) {
   return callTool<ListValsResponse>("list_vals", { limit: 100, sortBy: "updated", ...stripEmpty(options) }, signal);
+}
+
+/**
+ * Code visibility is the only access axis this extension changes. App access is read and shown but
+ * never set: 'restricted' requires a business plan, so the control would fail for most accounts.
+ * Non-public code needs pro or business, and Val Town rejects rather than failing quietly.
+ */
+export function setPrivacy(val: string, privacy: Privacy) {
+  return callToolVoid("update_val", { val, privacy });
 }
 
 export function getValDetail(val: string, signal?: AbortSignal) {
@@ -84,15 +93,11 @@ export function readBlob(storage: BlobStorage, key: string, signal?: AbortSignal
 }
 
 export function storeBlob(storage: BlobStorage, key: string, content: string) {
-  return callTool<unknown>("storeBlob", { key, content, storage });
+  return callToolVoid("storeBlob", { key, content, storage });
 }
 
 export function listOrgs(signal?: AbortSignal) {
   return callTool<ListOrgsResponse>("list_orgs", {}, signal);
-}
-
-export function findSkills(query: string, limit = 5, signal?: AbortSignal) {
-  return callTool<FindSkillsResponse>("find_val_town_skills", { query, limit }, signal);
 }
 
 /** Older responses nested the deployed URL under `links` instead of at the top level. */

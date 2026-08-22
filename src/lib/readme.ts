@@ -1,36 +1,29 @@
-import type { JsonSchema } from "./store";
+import { listFiles, readFile } from "./api";
+import { cacheReadme, cachedReadme } from "./cache";
 
-export function toolNameFor(valName: string): string {
-  return valName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+/**
+ * A val's README, read straight through the cache. `list_files` carries a per-file `version`, so the
+ * listing alone says whether the cached copy is still current — the content is only fetched when it
+ * is not. Missing is the common case, so nothing here treats it as an error.
+ */
+export async function loadReadme(val: string, signal?: AbortSignal): Promise<string | null> {
+  const { files } = await listFiles(val, {}, signal);
+  const found = files.find((file) => file.name.toUpperCase() === "README.MD");
+  if (!found) return null;
+
+  const cached = cachedReadme(val);
+  if (cached?.version === found.version) return cached.content || null;
+
+  const { content } = await readFile(val, found.path, {}, signal);
+  cacheReadme(val, { version: found.version, content });
+  return content || null;
 }
 
-export function leadParagraph(markdown: string): string | null {
-  const paragraphs = markdown
-    .split(/\n\s*\n/)
-    .map((block) => block.trim())
-    .filter(Boolean);
-
-  for (const block of paragraphs) {
-    if (block.startsWith("#") || block.startsWith("```") || block.startsWith(">")) continue;
-    const text = block.replace(/\s+/g, " ").trim();
-    if (text.length > 0) return text;
-  }
-  return null;
-}
-
-/** A val's own `description` is capped at 64 characters, so the schema cannot live there. */
-export function firstJsonSchema(markdown: string): JsonSchema | null {
-  const fences = markdown.matchAll(/```json\s*\n([\s\S]*?)```/gi);
-  for (const fence of fences) {
-    try {
-      const parsed = JSON.parse(fence[1]) as JsonSchema;
-      if (parsed && typeof parsed === "object" && (parsed.properties || parsed.type === "object")) return parsed;
-    } catch {
-      continue;
-    }
-  }
-  return null;
+/**
+ * Warms an empty cache for a val the user has only hovered over. A val already in the cache costs
+ * nothing here: opening it is what re-checks the version.
+ */
+export function prefetchReadme(val: string): void {
+  if (cachedReadme(val)) return;
+  void loadReadme(val).catch(() => undefined);
 }

@@ -1,5 +1,6 @@
 import { endpointOf, listFiles, readFile } from "../lib/api";
-import { requireBuiltin } from "../lib/builtins";
+import { loadState } from "../lib/store";
+import { readValConfig } from "../lib/valconfig";
 
 type Input = {
   /** The val as `handle/valName`, or a tool name from list-tools. */
@@ -16,38 +17,32 @@ export default async function getValInfo(input: Input) {
     return { val: identifier, path: input.path, fileType: file.fileType, content: file.content.slice(0, 40000) };
   }
 
-  const { files } = await listFiles(identifier);
-  const readme = files.find((file) => /^readme\.md$/i.test(file.name));
-
-  let readmeContent: string | null = null;
-  if (readme) {
-    try {
-      readmeContent = (await readFile(identifier, readme.path)).content.slice(0, 20000);
-    } catch {
-      readmeContent = null;
-    }
-  }
+  const [{ files }, config] = await Promise.all([listFiles(identifier), readValConfig(identifier)]);
 
   return {
     val: identifier,
+    description: config?.description ?? null,
+    // The one place the model learns a val's arguments, so it is read for the val it is about to run.
+    inputSchema: config?.inputSchema ?? null,
+    entrypoint: config?.entrypoint ?? null,
     files: files.map((file) => ({
       path: file.path,
       type: file.type,
       updatedAt: file.updatedAt,
       endpoint: endpointOf(file) ?? null,
     })),
-    readme: readmeContent,
+    note: config
+      ? undefined
+      : `${identifier} has no Raycast config, so its arguments are unknown. Read its source to work them out.`,
   };
 }
 
 async function resolveIdentifier(value: string): Promise<string> {
-  const state = await requireBuiltin("get-val-info");
+  const state = await loadState();
   if (value.includes("/")) return value;
 
-  const match = Object.values(state.tools).find(
-    (entry) => entry.spec?.name === value || entry.val.endsWith(`/${value}`),
-  );
-  if (match) return match.val;
+  const match = Object.keys(state.tools).find((identifier) => identifier.endsWith(`/${value}`));
+  if (match) return match;
 
-  throw new Error(`"${value}" is not a val identifier. Use handle/valName, or a name from list-tools.`);
+  throw new Error(`"${value}" is not a val identifier. Use handle/valName, as list-tools returns it.`);
 }

@@ -3,7 +3,8 @@
 Browse your [Val Town](https://www.val.town) account from Raycast, and turn the vals you choose
 into tools Raycast AI can call.
 
-The extension **views**; val.town **edits**. Nothing here writes your code.
+The extension **views**; val.town **edits**. Nothing here writes your code — the only things it
+changes are a val's two access settings and the config it stores alongside the val.
 
 ## Setup
 
@@ -14,8 +15,8 @@ extension's preferences.
 
 ### Search Vals
 
-The front door. Search your vals, or switch the scope dropdown to **Tools** to see only the ones
-you added. Open a val to reach:
+The only view command. The collection dropdown switches between **All Vals** and **Allowed** — the
+vals you have let Raycast AI call. Open a val to reach:
 
 - **Files** — the file tree, with a read-only viewer for each file
 - **Logs** and **Traces** — per file, since that is where Val Town hangs them. Both cover the last
@@ -26,20 +27,22 @@ you added. Open a val to reach:
 - **SQLite** — the val's own database: tables, row previews, and read-only queries
 - **Blobs** — the val's own blob storage
 
-### Manage Tools
+**AI agent access** is a val's one setting, with three states. A val starts with none of it:
+**Enable** (`⌘T`) opens the config screen, and the val joins the list when you save — never before,
+so backing out changes nothing. After that **Disable** / **Enable** (`⇧⌘A`) turns it off and on, and
+**Configure** reopens the config screen. A disabled val stays in the list and is hidden from the
+model; that is the off state, so there is nothing to remove.
 
-Everything Raycast AI can reach, one row per capability, filtered by **All / Tools / Skills**.
+Nothing here creates anything. Raycast's tools are fixed at build time — *List Vals*, *Read Val* and
+*Run Val* — and the list only decides which of your vals those three are willing to touch. That is
+also why there is no global switch: a val you never enable is not refused, it simply is not one of
+the user's tools as far as *List Vals* is concerned.
 
-- **Built-in** — the tools this extension ships: *Read Val*, *Run Val*, *Load Skill*. Their
-  descriptions are generated at build time, so a row carries only the switches: active, and (for
-  *Run Val*) whether to ask before running.
-- **Your Vals** — the vals you added with **Add Tool** (`⌘N`). Each row has active,
-  ask-before-running, and a hand-editable description and input schema. Each also shows whether its
-  spec is `ok`, `stale`, has `no schema`, or is `not callable` because the val has no runnable file.
-- **Your Skills** — the skills you added with **Add Skill** (`⇧⌘N`).
+The Allowed collection is listed from the list itself rather than from search results, so a val that
+was deleted or renamed on Val Town still appears rather than vanishing silently.
 
-**Ask before running is on by default**, both on *Run Val* and on each val you add. Either switch
-asking is enough to get a confirmation, so turn *Run Val*'s off if you want per-val control.
+**Nothing asks before running unless you say so.** Ask-before-running is a switch on each val,
+off when you first allow it.
 
 ### Errors
 
@@ -47,47 +50,121 @@ An optional menu bar item, shipped off by default. Turn it on, then use **Watch 
 file. It checks each watched file's traces once a minute and badges the count of failures you have
 not acknowledged.
 
-## Turning a val into a tool
+## Allowing a val as a tool
 
-1. **Add Tool** in Manage Tools, or `⌘T` on any row in Search Vals. Nothing is tagged and nothing on
-   val.town changes — your collection lives in this extension.
-2. Give the val an http file if it needs to take arguments. Only http vals can be called with input;
-   everything else runs through `run_file` with none.
-3. Write its README:
-   - the **first prose paragraph** becomes the tool's description
-   - the **first fenced `json` block** that looks like a JSON Schema becomes its input schema
+**Enable** (`⌘T`) on any val row, or on the val's own pane. That opens the config screen; the val
+joins the list only when you save, so escaping the screen changes nothing.
+
+The screen asks for the arguments the val takes, as a JSON Schema, plus a description for the model
+and whether it should ask before running. With Raycast AI available, `⌘G` reads the val's code and
+drafts the schema for you — correct anything it got wrong before saving.
+
+## Argument examples
+
+The **Arguments** box on a val's config screen takes a JSON Schema describing the request body the
+val's http handler reads. Raycast AI sends an object matching it, and the extension `POST`s that
+object as the body. Leave the box empty and the val is called with `GET` and no body at all.
+
+Give every property a `description`. That is what the model reads when it works out what to pass,
+and it is the difference between a val the model calls correctly and one it guesses at.
+
+**One required argument:**
 
 ```json
 {
   "type": "object",
-  "properties": { "city": { "type": "string", "description": "City to look up" } },
+  "properties": {
+    "city": { "type": "string", "description": "City to look up, for example Berlin" }
+  },
   "required": ["city"]
 }
 ```
 
-A val's own `description` field is capped at 64 characters, which is why the spec lives in the
-README. If the README has no lead paragraph, the description falls back to that field. Whatever is
-derived is editable on the val's row, and a hand-edited spec survives syncing until you re-derive it.
+**Optional arguments.** Anything left out of `required` is optional, so say what happens without it:
 
-Specs are derived when you add a val and refreshed when the collection syncs, not while Raycast AI
-is mid-conversation — reading files per invocation would cost three or four extra round trips every
-time. A sync asks Val Town which vals changed since the last one and re-derives only those.
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": { "type": "string", "description": "Search term" },
+    "limit": { "type": "integer", "description": "How many results to return. Defaults to 10." }
+  },
+  "required": ["query"]
+}
+```
 
-## Skills
+**A fixed set of choices.** `enum` keeps the model from inventing a value:
 
-A skill is a markdown guide at `skills/<name>/SKILL.md` in one of your vals. Its body names the vals
-to call as `handle/valName`, and the model calls them itself — there is no binding between a skill
-and a val.
+```json
+{
+  "type": "object",
+  "properties": {
+    "status": { "type": "string", "enum": ["todo", "doing", "done"], "description": "The new status" }
+  },
+  "required": ["status"]
+}
+```
 
-**Add Skill** walks your vals looking for those files, since Val Town's skill search can only answer
-queries and never says which val a skill came from. Once you have added at least one, *Load Skill*
-returns only the skills you added and left active; with none added it returns any of your own that
-match. Val Town's platform guides are always filtered out.
+**Lists and nested objects:**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "recipients": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Email addresses to notify"
+    },
+    "message": {
+      "type": "object",
+      "properties": {
+        "subject": { "type": "string", "description": "Subject line" },
+        "body": { "type": "string", "description": "Plain text body" }
+      },
+      "required": ["subject", "body"],
+      "description": "The email to send"
+    }
+  },
+  "required": ["recipients", "message"]
+}
+```
+
+The extension does not check the body against the schema before sending it — the schema steers the
+model, it does not police it. `required` and `enum` are instructions to Raycast AI, not validation.
+
+## Where a val's settings live
+
+In the **val's own blob storage**, under the key `raycast:tool.json`:
+
+```json
+{
+  "version": 1,
+  "inputSchema": { "type": "object", "properties": {} },
+  "entrypoint": null,
+  "description": null,
+  "active": true,
+  "confirm": false
+}
+```
+
+It lives with the val so it survives forking, sharing, and reinstalling the extension. `confirm`
+makes Raycast AI stop and check before running that val. `entrypoint` is the file to call, chosen on
+the config screen — an http file is fetched at its endpoint, anything else runs with `run_file` and
+takes no arguments. A config written before that field existed has `null` there, and falls back to
+the first `main.*` http file, then the first http file, then the first runnable one.
+
+If a val has no such config, calling it fails with a message saying so rather than quietly sending
+an empty body.
 
 ## Where extension state lives
 
-Your collection — the vals, the skills, the spec cache, the switches, the watch list — is stored as
-`raycast:tools.json` in your **account-global blob storage**.
+Which vals you allowed and the error watch list are stored as `raycast:tools.json` in your
+**account-global blob storage**.
+Everything about *how to call a particular val* lives in that val instead.
+
+Listing costs one call no matter how many vals you have allowed: the model gets identifiers and
+descriptions, then reads the config for the one val it is about to run.
 
 Not LocalStorage, which is device-local and not covered by Raycast Cloud Sync, so the collection
 would not follow you between machines. Not a dedicated val either, because a free Val Town account

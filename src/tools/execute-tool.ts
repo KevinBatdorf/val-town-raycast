@@ -1,23 +1,21 @@
 import type { Tool } from "@raycast/api";
-import { builtinSettings, requireBuiltin } from "../lib/builtins";
-import { type ToolEntry } from "../lib/store";
+import { loadState } from "../lib/store";
 import { executeTool as run } from "../lib/tools";
+import { missingConfigError, readValConfig, type ValConfig } from "../lib/valconfig";
 
 type Input = {
-  /** The tool's `name` exactly as list-tools returned it. Never guess this. */
-  name: string;
-  /** The arguments as a JSON object string, matching the `inputSchema` from list-tools. */
+  /** The val as `handle/valName`, exactly as list-tools returned it. Never guess this. */
+  val: string;
+  /** The request body as a JSON object string, matching the val's `arguments` from list-tools. */
   argumentsJson?: string;
 };
 
 export default async function executeTool(input: Input) {
-  const { entry } = await resolve(input.name);
-  const args = parseArgs(input.argumentsJson);
-  const result = await run(entry, args);
+  const config = await resolve(input.val);
+  const result = await run(input.val, config, parseArgs(input.argumentsJson));
 
   return {
-    tool: input.name,
-    val: entry.val,
+    val: input.val,
     ok: result.ok,
     calledVia: result.via,
     status: result.status,
@@ -26,35 +24,44 @@ export default async function executeTool(input: Input) {
   };
 }
 
+/**
+ * Only the documented fields — `message`, `info`, `style`, `image` — and never a thrown error:
+ * excess-property checks do not reach this return, and a confirmation that throws cancels the call
+ * without ever asking. When the config cannot be read the safe answer is to ask anyway; the tool
+ * itself then reports the real error.
+ */
 export const confirmation: Tool.Confirmation<Input> = async (input) => {
-  const { entry, always } = await resolve(input.name);
-  if (!always && !entry.requiresConfirmation) return undefined;
+  let config: ValConfig | null = null;
+  try {
+    config = await resolve(input.val);
+  } catch {
+    // Fail closed: ask rather than silently skipping or silently cancelling.
+  }
+
+  if (config && !config.confirm) return undefined;
 
   return {
-    title: `Run ${entry.spec?.name ?? entry.val}?`,
-    message: entry.spec?.description,
+    message: `Run ${input.val}?`,
     info: [
-      { name: "Val", value: entry.val },
-      ...(input.argumentsJson ? [{ name: "Arguments", value: input.argumentsJson }] : []),
+      ...(config?.description ? [{ name: "Does", value: config.description }] : []),
+      ...(input.argumentsJson ? [{ name: "Body", value: input.argumentsJson }] : []),
     ],
   };
 };
 
-/** Either switch asking is enough: the built-in one covers every val, a val's own covers itself. */
-async function resolve(name: string): Promise<{ entry: ToolEntry; always: boolean }> {
-  const state = await requireBuiltin("execute-tool");
-  const entries = Object.values(state.tools).filter((entry) => entry.enabled);
-
-  const match =
-    entries.find((entry) => entry.spec?.name === name) ??
-    entries.find((entry) => entry.val === name) ??
-    entries.find((entry) => entry.val.endsWith(`/${name}`));
-
-  if (!match) {
-    const available = entries.map((entry) => entry.spec?.name ?? entry.val).join(", ");
-    throw new Error(`No active Val Town tool called "${name}". Available: ${available || "none"}.`);
+async function resolve(val: string): Promise<ValConfig> {
+  const state = await loadState();
+  if (!state.tools[val]) {
+    const available = Object.keys(state.tools).join(", ");
+    throw new Error(`${val} is not one of the user's allowed vals. Allowed: ${available || "none"}.`);
   }
-  return { entry: match, always: builtinSettings(state, "execute-tool").requiresConfirmation };
+
+  const config = await readValConfig(val);
+  if (!config) throw missingConfigError(val);
+  if (!config.active)
+    throw new Error(`${val} is disabled. The user re-enables it with Enable Tool in the Val Town extension.`);
+
+  return config;
 }
 
 function parseArgs(raw: string | undefined): Record<string, unknown> | undefined {

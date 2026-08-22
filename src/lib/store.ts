@@ -1,7 +1,10 @@
 import { listOrgs, readBlob, storeBlob, type BlobStorage } from "./api";
+import { cacheState } from "./cache";
 import { McpError } from "./mcp";
 
-export const STATE_KEY = "raycast:tools.json";
+const STATE_KEY = "raycast:tools.json";
+
+const STATE_VERSION = 6;
 
 export type JsonSchema = {
   type?: string;
@@ -10,81 +13,39 @@ export type JsonSchema = {
   [key: string]: unknown;
 };
 
-export type ToolSpec = {
-  name: string;
-  description: string;
-  inputSchema: JsonSchema | null;
-  filePath: string | null;
-  endpoint: string | null;
-  method: "GET" | "POST";
-  descriptionSource: "readme" | "val";
-  restricted: boolean;
-};
-
-export type ToolEntry = {
+/** Membership only. How to call a val lives in that val's own blob, so it travels with the val. */
+type ToolEntry = {
   val: string;
-  spec: ToolSpec | null;
-  enabled: boolean;
-  requiresConfirmation: boolean;
-  /** A hand-edited spec survives syncing until the user re-derives it. */
-  edited: boolean;
-  derivedAt: string | null;
-  addedAt: string | null;
-  error: string | null;
-};
-
-export type SkillEntry = {
-  val: string;
-  /** Always `skills/<name>/SKILL.md`. */
-  path: string;
-  name: string;
-  description: string;
-  enabled: boolean;
   addedAt: string;
 };
 
-export type BuiltinEntry = {
-  enabled: boolean;
-  requiresConfirmation: boolean;
-};
-
-export type WatchedFile = {
+type WatchedFile = {
   val: string;
   fileId: string;
   path: string;
 };
 
 export type ExtensionState = {
-  version: 2;
-  lastSync: string | null;
+  version: typeof STATE_VERSION;
   /** Keyed by `handle/valName`. This key set is the collection: nothing else decides membership. */
   tools: Record<string, ToolEntry>;
-  skills: Record<string, SkillEntry>;
-  builtins: Record<string, BuiltinEntry>;
   watchedFiles: WatchedFile[];
   /** Newest failure the user acknowledged, per file, so a restart does not re-badge it. */
   reportedFailures: Record<string, string>;
 };
 
-export function emptyState(): ExtensionState {
+function emptyState(): ExtensionState {
   return {
-    version: 2,
-    lastSync: null,
+    version: STATE_VERSION,
     tools: {},
-    skills: {},
-    builtins: {},
     watchedFiles: [],
     reportedFailures: {},
   };
 }
 
-export function skillKey(val: string, path: string): string {
-  return `${val}:${path}`;
-}
-
 let cachedHandle: string | null = null;
 
-export async function personalHandle(signal?: AbortSignal): Promise<string> {
+async function personalHandle(signal?: AbortSignal): Promise<string> {
   if (cachedHandle) return cachedHandle;
   const { user, orgs } = await listOrgs(signal);
   const handle = orgs.find((org) => org.isPersonal)?.handle ?? user.handle;
@@ -97,7 +58,14 @@ async function stateStorage(signal?: AbortSignal): Promise<BlobStorage> {
   return { type: "deprecated_global", org: await personalHandle(signal) };
 }
 
+/** Caches on the way through, so the next command run paints before this call finishes. */
 export async function loadState(signal?: AbortSignal): Promise<ExtensionState> {
+  const state = await fetchState(signal);
+  cacheState(state);
+  return state;
+}
+
+async function fetchState(signal?: AbortSignal): Promise<ExtensionState> {
   const storage = await stateStorage(signal);
 
   let raw: string | undefined;
@@ -111,27 +79,43 @@ export async function loadState(signal?: AbortSignal): Promise<ExtensionState> {
   if (!raw) return emptyState();
 
   try {
-    return migrate(JSON.parse(raw) as Partial<ExtensionState>);
+    return normalizeState(JSON.parse(raw) as Record<string, unknown>);
   } catch {
     return emptyState();
   }
 }
 
-/** Version 1 filled `tools` from the `raycast-tool` tag, so its entries are still the collection. */
-function migrate(stored: Partial<ExtensionState>): ExtensionState {
-  const tools = Object.fromEntries(
-    Object.entries(stored.tools ?? {}).map(([identifier, entry]) => [
-      identifier,
-      { ...entry, addedAt: entry.addedAt ?? entry.derivedAt ?? null },
-    ]),
-  );
+type LegacyEntry = { val?: string; addedAt?: string | null; derivedAt?: string | null };
 
-  return { ...emptyState(), ...stored, tools, version: 2 };
+/**
+ * Brings any stored or cached shape up to the current version. Every cache in the extension is keyed
+ * on something that survives a shape change — `useCachedPromise` hashes the function's source, not
+ * the type — so a value read from one has to be normalized before it is trusted, not just parsed.
+ *
+ * Earlier versions also cached a spec derived from each val's README. Only the key set survives.
+ */
+export function normalizeState(stored: Record<string, unknown>): ExtensionState {
+  const base = emptyState();
+  const storedTools = (stored.tools ?? {}) as Record<string, LegacyEntry>;
+
+  return {
+    ...base,
+    tools: Object.fromEntries(
+      Object.entries(storedTools).map(([identifier, entry]) => [
+        identifier,
+        { val: entry.val ?? identifier, addedAt: entry.addedAt ?? entry.derivedAt ?? new Date(0).toISOString() },
+      ]),
+    ),
+    watchedFiles: (stored.watchedFiles ?? []) as WatchedFile[],
+    reportedFailures: (stored.reportedFailures ?? {}) as Record<string, string>,
+  };
 }
 
 export async function saveState(state: ExtensionState): Promise<void> {
   const storage = await stateStorage();
   await storeBlob(storage, STATE_KEY, JSON.stringify(state));
+  // Only after the write lands, so a failed save does not leave the cache claiming it succeeded.
+  cacheState(state);
 }
 
 export async function mutateState(mutate: (state: ExtensionState) => ExtensionState): Promise<ExtensionState> {

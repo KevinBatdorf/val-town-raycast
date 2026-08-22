@@ -13,10 +13,6 @@ export class McpError extends Error {
   }
 }
 
-export function isAuthError(error: unknown): boolean {
-  return error instanceof McpError && (error.status === 401 || error.status === 403);
-}
-
 let requestId = 0;
 
 type JsonRpcResponse = {
@@ -66,20 +62,28 @@ type ToolCallResult = {
 
 /** A few tools answer with prose rather than JSON, so a failed parse returns the raw text. */
 export async function callTool<T>(name: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
-  const result = (await rpc("tools/call", { name, arguments: args }, signal)) as ToolCallResult;
-  const text = result.content?.find((part) => part.type === "text")?.text ?? "";
+  const text = await callToolText(name, args, signal);
 
-  if (result.isError) {
-    throw new McpError(extractErrorMessage(text) ?? `${name} failed`);
-  }
-
-  if (!text) return undefined as T;
+  // Handing back undefined here renders as an empty view with nothing to explain it.
+  if (!text) throw new McpError(`${name} returned nothing`);
 
   try {
     return JSON.parse(text) as T;
   } catch {
     return text as unknown as T;
   }
+}
+
+/** For a tool whose success is an empty response, where no body is the expected answer. */
+export async function callToolVoid(name: string, args: Record<string, unknown> = {}): Promise<void> {
+  await callToolText(name, args);
+}
+
+async function callToolText(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
+  const result = (await rpc("tools/call", { name, arguments: args }, signal)) as ToolCallResult;
+  const text = result.content?.find((part) => part.type === "text")?.text ?? "";
+  if (result.isError) throw new McpError(extractErrorMessage(text) ?? `${name} failed`);
+  return text;
 }
 
 function extractErrorMessage(text: string): string | undefined {

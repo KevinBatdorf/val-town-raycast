@@ -1,47 +1,209 @@
 import { Action, ActionPanel, Color, Icon, Keyboard, List, Toast, showToast, useNavigation } from "@raycast/api";
-import { useCachedPromise, useCachedState } from "@raycast/utils";
-import { useState } from "react";
-import { listVals } from "./lib/api";
-import { errorMessage, privacyIcon } from "./lib/format";
-import { loadState, type ToolEntry } from "./lib/store";
-import { prepareEntry, removeTool } from "./lib/tools";
-import type { ValSummary } from "./lib/types";
-import { ToolForm } from "./views/ToolForm";
+import { showFailureToast, useCachedPromise, useCachedState } from "@raycast/utils";
+import { useEffect, useMemo, useState } from "react";
+import { listVals, setPrivacy, webUrlFor } from "./lib/api";
+import { cacheConfigs, cachedConfigs, cachedState } from "./lib/cache";
+import { appAccessColor, errorMessage, privacyColor } from "./lib/format";
+import { prefetchReadme } from "./lib/readme";
+import { loadState, normalizeState, type ExtensionState } from "./lib/store";
+import type { Privacy, ValSummary } from "./lib/types";
+import { readConfigs, readValConfig, writeValConfig, type ValConfig } from "./lib/valconfig";
+import { RegisterVal } from "./views/RegisterVal";
 import { ValDetail } from "./views/ValDetail";
 
-type Scope = "vals" | "tools";
+type Collection = "vals" | "tools";
+
+/** Undefined means not read yet; null means the val carries no config. */
+type Configs = Record<string, ValConfig | null>;
+
+/**
+ * Val Town validates `name` as a project name — it must start with a letter and hold only letters,
+ * digits, hyphens and underscores — and rejects the whole call otherwise. A search box takes
+ * anything, so it is filtered down to what the API will accept before being sent.
+ */
+function nameQuery(text: string): string {
+  const kept = text.replace(/[^A-Za-z0-9_-]/g, "");
+  const firstLetter = kept.search(/[A-Za-z]/);
+  return firstLetter === -1 ? "" : kept.slice(firstLetter);
+}
 
 export default function SearchVals() {
+  const { push } = useNavigation();
   const [searchText, setSearchText] = useState("");
-  const [scope, setScope] = useCachedState<Scope>("search-scope", "vals");
+  const [collection, setCollection] = useCachedState<Collection>("collection", "vals");
+  const [configs, setConfigs] = useState<Configs>(cachedConfigs);
 
-  const { data, isLoading, error, revalidate } = useCachedPromise(
+  // DEBUG: temporary, to catch what re-renders the list while idle.
+  console.log("render", Date.now() % 100000);
+
+  const { data, isLoading, error, revalidate, mutate } = useCachedPromise(
     async (text: string) => {
-      const [{ vals }, state] = await Promise.all([listVals({ name: text.trim() || undefined }), loadState()]);
-      return { vals, collected: state.tools };
+      console.log("FETCH list_vals+state", Date.now() % 100000, JSON.stringify(text));
+      const [{ vals }, state] = await Promise.all([listVals({ name: text || undefined }), loadState()]);
+      return { vals, tools: state.tools };
     },
-    [searchText],
-    { keepPreviousData: true },
+    [nameQuery(searchText)],
+    {
+      // Seeded from the local cache so the allow list paints before the two round trips finish.
+      keepPreviousData: true,
+      initialData: { vals: [], tools: cachedState()?.tools ?? {} },
+      // Reported without tearing the list down; the rows already on screen are still true.
+      onError: (failure) => void showFailureToast(failure, { title: "Could not load your vals" }),
+    },
   );
 
-  const collected = data?.collected ?? {};
-  const vals = (data?.vals ?? []).filter((val) => scope === "vals" || val.identifier in collected);
+  // The hook's cache outlives a shape change, so its value is migrated before anything reads it.
+  const tools = useMemo(
+    () => normalizeState({ tools: data?.tools ?? {} } as Record<string, unknown>).tools,
+    [data?.tools],
+  );
+  const summaries = new Map((data?.vals ?? []).map((val) => [val.identifier, val]));
 
-  return (
-    <List
-      isLoading={isLoading}
-      searchText={searchText}
-      onSearchTextChange={setSearchText}
-      throttle
-      searchBarPlaceholder={scope === "tools" ? "Search the vals you added as tools" : "Search your vals"}
-      searchBarAccessory={
-        <List.Dropdown tooltip="Scope" value={scope} onChange={(value) => setScope(value as Scope)}>
-          <List.Dropdown.Item title="Vals" value="vals" icon={Icon.Code} />
-          <List.Dropdown.Item title="Tools" value="tools" icon={Icon.Stars} />
-        </List.Dropdown>
-      }
-    >
-      {error ? (
+  // Bounded by the allow list rather than by the search results, so it runs in either collection.
+  const registered = Object.keys(tools).sort().join(",");
+
+  useEffect(() => {
+    if (!registered) return;
+    const controller = new AbortController();
+
+    console.log("SWEEP configs", Date.now() % 100000);
+    void (async () => {
+      const fresh = await readConfigs(registered.split(","), controller.signal).catch(() => null);
+      if (controller.signal.aborted || !fresh) return;
+      setConfigs(fresh);
+      cacheConfigs(fresh);
+    })();
+
+    return () => controller.abort();
+  }, [registered]);
+
+  function applyState(next?: ExtensionState) {
+    if (!next || !data) {
+      revalidate();
+      return;
+    }
+    const updated = { ...data, tools: next.tools };
+    void mutate(Promise.resolve(updated), { optimisticUpdate: () => updated, shouldRevalidateAfter: false });
+  }
+
+  function rememberConfig(val: string, config: ValConfig | null) {
+    setConfigs((current) => {
+      const next = { ...current, [val]: config };
+      cacheConfigs(next);
+      return next;
+    });
+  }
+
+  function configure(identifier: string, register: boolean, valDescription?: string | null) {
+    push(
+      <RegisterVal
+        identifier={identifier}
+        register={register}
+        preloaded={configs[identifier]}
+        valDescription={valDescription}
+        onSaved={(next) => {
+          applyState(next);
+          void readValConfig(identifier)
+            .then((config) => rememberConfig(identifier, config))
+            .catch(() => undefined);
+        }}
+      />,
+    );
+  }
+
+  /** Toggling writes the val's own blob, so the row moves first and is put back if that fails. */
+  /** The row moves first and is put back if the write fails, since the config lives on the val. */
+  async function updateConfig(identifier: string, config: ValConfig, change: Partial<ValConfig>) {
+    const next = { ...config, ...change };
+    rememberConfig(identifier, next);
+
+    try {
+      await writeValConfig(identifier, next);
+    } catch (writeError) {
+      rememberConfig(identifier, config);
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Could not change this val",
+        message: errorMessage(writeError),
+      });
+    }
+  }
+
+  /** Both axes are tier-gated, so a rejection is reported rather than swallowed. */
+  async function changeAccess(label: string, apply: () => Promise<void>) {
+    const toast = await showToast({ style: Toast.Style.Animated, title: `Setting ${label}` });
+    try {
+      await apply();
+      revalidate();
+      toast.style = Toast.Style.Success;
+      toast.title = `Now ${label}`;
+    } catch (changeError) {
+      toast.style = Toast.Style.Failure;
+      toast.title = "Could not change access";
+      toast.message = errorMessage(changeError);
+    }
+  }
+
+  function rowActions(identifier: string, val: ValSummary | undefined, isTool: boolean) {
+    const config = configs[identifier];
+
+    return (
+      <ActionPanel>
+        <ActionPanel.Section>
+          <Action.Push title="Open Val" icon={Icon.ChevronRight} target={<ValDetail identifier={identifier} />} />
+          <Action.OpenInBrowser title="Open on Val Town" url={val?.links.html ?? webUrlFor(identifier)} />
+          {val ? (
+            <ActionPanel.Submenu title="Change Visibility" icon={Icon.Eye}>
+              {(["public", "unlisted", "private"] as Privacy[]).map((value) => (
+                <Action
+                  key={value}
+                  title={value}
+                  icon={value === val.privacy ? Icon.CheckCircle : Icon.Circle}
+                  onAction={
+                    value === val.privacy
+                      ? () => undefined
+                      : () => changeAccess(`code ${value}`, () => setPrivacy(identifier, value))
+                  }
+                />
+              ))}
+            </ActionPanel.Submenu>
+          ) : null}
+        </ActionPanel.Section>
+
+        <ActionPanel.Section title="AI Agent Access">
+          {/* Everything but Configure needs an enabled val: enabling happens by saving the config. */}
+          <Action
+            title="Configure"
+            icon={Icon.Pencil}
+            shortcut={{ modifiers: ["cmd"], key: "t" }}
+            onAction={() => configure(identifier, !isTool, val?.description)}
+          />
+          {isTool && config?.active ? (
+            <Action
+              title="Disable"
+              icon={Icon.Circle}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+              onAction={() => updateConfig(identifier, config, { active: false })}
+            />
+          ) : null}
+          {isTool && config?.active ? (
+            <Action
+              title={config.confirm ? "Disable Confirm" : "Require Confirm"}
+              icon={config.confirm ? Icon.LockUnlocked : Icon.Lock}
+              shortcut={Keyboard.Shortcut.Common.Copy}
+              onAction={() => updateConfig(identifier, config, { confirm: !config.confirm })}
+            />
+          ) : null}
+        </ActionPanel.Section>
+      </ActionPanel>
+    );
+  }
+
+  // Only when there is nothing to fall back to. A failed search over a list already on screen is a
+  // toast, not a dead end.
+  if (error && (data?.vals ?? []).length === 0) {
+    return (
+      <List>
         <List.EmptyView
           icon={{ source: Icon.Warning, tintColor: Color.Red }}
           title="Could not load your vals"
@@ -52,99 +214,136 @@ export default function SearchVals() {
             </ActionPanel>
           }
         />
+      </List>
+    );
+  }
+
+  /**
+   * Listed from the collection rather than from the search results, so a tool whose val was deleted
+   * or renamed still shows up and can still be removed. Filtered here because the search bar is
+   * driving a server-side query for the other collection.
+   */
+  /**
+   * The collection is what the agent can actually reach, so a disabled val is not in it — it is
+   * re-enabled from All Vals or its own pane. Unread configs count as active rather than popping in
+   * once the sweep lands; a val with a broken config stays visible, warning and all.
+   */
+  const reachable = Object.keys(tools).filter((identifier) => configs[identifier]?.active !== false);
+  const hasAllowed = reachable.length > 0;
+  const showTools = hasAllowed && collection === "tools";
+
+  console.log("STATE", Date.now() % 100000, JSON.stringify({ collection, hasAllowed, showTools }));
+
+  const toolRows = reachable
+    .filter((identifier) => identifier.toLowerCase().includes(searchText.trim().toLowerCase()))
+    .sort();
+
+  return (
+    <List
+      isLoading={isLoading}
+      searchText={searchText}
+      onSearchTextChange={setSearchText}
+      onSelectionChange={(id) => {
+        console.log("SELECTION", Date.now() % 100000, id);
+        if (id) prefetchReadme(id);
+      }}
+      throttle
+      searchBarPlaceholder={showTools ? "Filter the vals you allowed" : "Search your vals"}
+      searchBarAccessory={
+        hasAllowed ? (
+          <List.Dropdown
+            tooltip="Collection"
+            value={showTools ? "tools" : "vals"}
+            onChange={(value) => {
+              console.log("DROPDOWN onChange", Date.now() % 100000, JSON.stringify(value));
+              setCollection(value as Collection);
+            }}
+          >
+            <List.Dropdown.Item title="All Vals" value="vals" icon={Icon.Code} />
+            <List.Dropdown.Item title="AI Agent Access" value="tools" icon={Icon.Stars} />
+          </List.Dropdown>
+        ) : undefined
+      }
+    >
+      {showTools ? (
+        <>
+          <List.EmptyView icon={Icon.MagnifyingGlass} title="No matches" />
+          {toolRows.map((identifier) => {
+            const val = summaries.get(identifier);
+            return (
+              <List.Item
+                key={identifier}
+                id={identifier}
+                title={val?.name ?? identifier.split("/")[1] ?? identifier}
+                subtitle={val?.description ?? undefined}
+                accessories={[
+                  ...(val ? accessTags(val.privacy, val.httpPrivacy) : []),
+                  ...agentAccess(configs[identifier]),
+                ]}
+                actions={rowActions(identifier, val, true)}
+              />
+            );
+          })}
+        </>
       ) : (
         <>
-          <List.EmptyView
-            icon={scope === "tools" ? Icon.Stars : Icon.MagnifyingGlass}
-            title={scope === "tools" ? "No vals added as tools" : "No vals found"}
-            description={scope === "tools" ? "Add one with ⌘T here, or from Manage Tools." : "Try a different search."}
-          />
-          {vals.map((val) => (
-            <ValRow key={val.id} val={val} entry={collected[val.identifier]} onChanged={revalidate} />
-          ))}
+          <List.EmptyView icon={Icon.MagnifyingGlass} title="No vals found" description="Try a different search." />
+          {(data?.vals ?? []).map((val) => {
+            const isTool = val.identifier in tools;
+            return (
+              <List.Item
+                key={val.id}
+                id={val.identifier}
+                title={val.name}
+                subtitle={val.description ?? undefined}
+                accessories={[
+                  ...accessTags(val.privacy, val.httpPrivacy),
+                  ...(isTool ? agentAccess(configs[val.identifier]) : []),
+                ]}
+                actions={rowActions(val.identifier, val, isTool)}
+              />
+            );
+          })}
         </>
       )}
     </List>
   );
 }
 
-function ValRow({ val, entry, onChanged }: { val: ValSummary; entry?: ToolEntry; onChanged: () => void }) {
-  const { push } = useNavigation();
-  const isTool = entry !== undefined;
+/**
+ * Only the states worth noticing. Private code and a public endpoint are both the quiet case, and a
+ * row carrying two tags that both read "public" says less than one that carries neither.
+ */
+function accessTags(privacy: Privacy, appAccess: "public" | "restricted"): List.Item.Accessory[] {
+  const color = privacyColor(privacy);
 
-  async function add() {
-    const toast = await showToast({ style: Toast.Style.Animated, title: `Reading ${val.name}` });
-    try {
-      const prepared = await prepareEntry(val, entry);
-      toast.hide();
-      push(<ToolForm entry={prepared} onSaved={onChanged} />);
-    } catch (error) {
-      toast.style = Toast.Style.Failure;
-      toast.title = "Could not read this val";
-      toast.message = errorMessage(error);
-    }
+  return [
+    ...(color ? [{ tag: { value: privacy, color }, tooltip: `Code is ${privacy}` }] : []),
+    ...(appAccess === "restricted"
+      ? [
+          {
+            tag: { value: "app: private", color: appAccessColor(appAccess) },
+            tooltip: "Only granted orgs can call this val's endpoints",
+          },
+        ]
+      : []),
+  ];
+}
+
+/**
+ * Present or absent, never on or off: a val the agent cannot reach looks the same whether it was
+ * switched off or never enabled, which is the only distinction the user is asked to care about.
+ * Undefined means the config has not been read yet.
+ */
+function agentAccess(config: ValConfig | null | undefined): List.Item.Accessory[] {
+  if (config === undefined) return [];
+  if (config === null) {
+    return [{ icon: { source: Icon.Warning, tintColor: Color.Red }, tooltip: "No config — calling this will fail" }];
   }
+  if (!config.active) return [];
 
-  async function remove() {
-    const toast = await showToast({ style: Toast.Style.Animated, title: "Removing" });
-    try {
-      await removeTool(val.identifier);
-      toast.style = Toast.Style.Success;
-      toast.title = `Removed ${val.name}`;
-      onChanged();
-    } catch (error) {
-      toast.style = Toast.Style.Failure;
-      toast.title = "Could not remove";
-      toast.message = errorMessage(error);
-    }
-  }
-
-  return (
-    <List.Item
-      icon={{ source: privacyIcon(val.privacy), tintColor: isTool ? Color.Purple : Color.SecondaryText }}
-      title={val.name}
-      subtitle={val.description ?? undefined}
-      accessories={[
-        ...(isTool ? [{ tag: { value: "tool", color: Color.Purple } }] : []),
-        { date: new Date(val.createdAt), tooltip: `Created ${new Date(val.createdAt).toLocaleString()}` },
-      ]}
-      actions={
-        <ActionPanel>
-          <ActionPanel.Section>
-            <Action.Push title="Open Val" icon={Icon.ChevronRight} target={<ValDetail identifier={val.identifier} />} />
-            <Action.OpenInBrowser title="Open on Val Town" url={val.links.html} />
-          </ActionPanel.Section>
-          <ActionPanel.Section>
-            <Action
-              title={isTool ? "Edit Tool Details" : "Add as Tool"}
-              icon={Icon.Stars}
-              shortcut={{ modifiers: ["cmd"], key: "t" }}
-              onAction={add}
-            />
-            {isTool ? (
-              <Action
-                title="Remove from Tools"
-                icon={Icon.Trash}
-                style={Action.Style.Destructive}
-                shortcut={Keyboard.Shortcut.Common.Remove}
-                onAction={remove}
-              />
-            ) : null}
-          </ActionPanel.Section>
-          <ActionPanel.Section>
-            <Action.CopyToClipboard
-              title="Copy Identifier"
-              content={val.identifier}
-              shortcut={Keyboard.Shortcut.Common.Pin}
-            />
-            <Action.CopyToClipboard
-              title="Copy URL"
-              content={val.links.html}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "." }}
-            />
-          </ActionPanel.Section>
-        </ActionPanel>
-      }
-    />
-  );
+  return [
+    ...(config.confirm ? [{ tag: { value: "must confirm", color: Color.Orange } }] : []),
+    { tag: { value: "ai", color: Color.Purple }, tooltip: "AI Agent allowed" },
+  ];
 }
