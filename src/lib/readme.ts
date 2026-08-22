@@ -9,7 +9,11 @@ import { cacheReadme, cachedReadme } from "./cache";
 export async function loadReadme(val: string, signal?: AbortSignal): Promise<string | null> {
   const { files } = await listFiles(val, {}, signal);
   const found = files.find((file) => file.name.toUpperCase() === "README.MD");
-  if (!found) return null;
+  if (!found) {
+    // Cached too: a val without a README should not be re-listed on every hover.
+    cacheReadme(val, { version: -1, content: "" });
+    return null;
+  }
 
   const cached = cachedReadme(val);
   if (cached?.version === found.version) return cached.content || null;

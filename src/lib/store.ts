@@ -98,7 +98,7 @@ export function normalizeState(stored: Record<string, unknown>): ExtensionState 
   };
 }
 
-export async function saveState(state: ExtensionState): Promise<void> {
+async function saveState(state: ExtensionState): Promise<void> {
   const storage = await stateStorage();
   await storeBlob(storage, STATE_KEY, JSON.stringify(state));
   // Only after the write lands, so a failed save does not leave the cache claiming it succeeded.

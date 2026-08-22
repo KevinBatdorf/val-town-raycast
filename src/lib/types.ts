@@ -64,7 +64,7 @@ export type ReadFileResponse = {
   fileType: FileType;
 };
 
-export type TraceEntry = {
+type TraceEntry = {
   traceId: string;
   name: string;
   startTime: string;
@@ -136,7 +136,7 @@ export type SqliteResponse = {
   rowsAffected?: number;
 };
 
-export type BlobSummary = {
+type BlobSummary = {
   key: string;
   size?: number;
   lastModified?: string;
@@ -179,7 +179,7 @@ export type ListOrgsResponse = {
   orgs: Org[];
 };
 
-export type Skill = {
+type Skill = {
   name: string;
   description: string;
   content: string;

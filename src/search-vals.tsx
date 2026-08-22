@@ -106,7 +106,6 @@ export default function SearchVals() {
     );
   }
 
-  /** Toggling writes the val's own blob, so the row moves first and is put back if that fails. */
   /** The row moves first and is put back if the write fails, since the config lives on the val. */
   async function updateConfig(identifier: string, config: ValConfig, change: Partial<ValConfig>) {
     const next = { ...config, ...change };

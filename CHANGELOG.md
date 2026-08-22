@@ -1,32 +1,33 @@
 # Val Town Changelog
 
-## [Rewrite] - 2026-08-20
+## [Rewrite] - 2026-08-22
 
-Rebuilt around observability and AI tools. The extension views; val.town edits.
+Rebuilt around one command and an allow list: browse your vals, and allow Raycast AI to run the
+ones you choose.
 
 ### Added
 
-- Search Vals: file tree with a read-only viewer, plus per-file logs, traces and schedules
-- Val history, and val-scoped SQLite and blob browsing
-- Manage Tools: a row per capability — the built-in tools, the vals you add, and the skills you
-  add — each with its own active and ask-before-running switches, plus hand-editable specs,
-  re-derivation and test runs
-- Four AI tools: list the collection, execute one, read a val's source, and load one of your own
-  Val Town skills
-- Errors: an optional menu bar item that watches chosen files for failed executions
+- Search Vals: your vals with a detail pane per val — README, access, agent settings — and its
+  files, logs, traces, schedules, history, SQLite and blobs
+- An allow list for Raycast AI. Configure a val (description, entrypoint, arguments as a JSON
+  Schema, ask-before-running) and it joins on save; disable and re-enable per val
+- Raycast AI can draft a val's argument schema by reading its code (`⌘G`)
+- Six AI capabilities: list allowed vals, run one, read a val's source, read its blobs, check its
+  recent runs and failures, and load one of your own Val Town skills
+- Change a val's code visibility from Raycast
 
 ### Changed
 
 - Talks to Val Town's MCP endpoint over plain HTTP, which is the only place logs, traces, blobs
   and skills are exposed
-- Extension state moved to account-global blob storage, so a tool collection follows you between
-  machines
+- How to call a val lives in that val's own blob storage, so it follows forks and machines; the
+  allow list lives in account-global blob storage
 - Updated to `@raycast/api` 2.x and dropped `node-fetch` and `date-fns`
 
 ### Removed
 
 - Running vals with arbitrary arguments from a form, searching other people's vals, likes and
-  references. Val town's own site is better at all of these
+  references. Val Town's own site is better at all of these
 
 ## [Added Val Town] - 2023-10-16
 

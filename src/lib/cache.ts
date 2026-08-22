@@ -47,7 +47,7 @@ export function cacheConfigs(configs: Record<string, ValConfig | null>): void {
 }
 
 /** A val's README, kept against the file version so a re-read only happens when it actually changed. */
-export type CachedReadme = { version: number; content: string };
+type CachedReadme = { version: number; content: string };
 
 export function cachedReadme(val: string): CachedReadme | undefined {
   return read<CachedReadme>(`readme:${val}`);

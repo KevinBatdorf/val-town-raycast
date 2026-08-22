@@ -1,5 +1,5 @@
 import type { Tool } from "@raycast/api";
-import { loadState } from "../lib/store";
+import { requireAllowed } from "../lib/allowed";
 import { executeTool as run } from "../lib/tools";
 import { missingConfigError, readValConfig, type ValConfig } from "../lib/valconfig";
 
@@ -50,11 +50,7 @@ export const confirmation: Tool.Confirmation<Input> = async (input) => {
 };
 
 async function resolve(val: string): Promise<ValConfig> {
-  const state = await loadState();
-  if (!state.tools[val]) {
-    const available = Object.keys(state.tools).join(", ");
-    throw new Error(`${val} is not one of the user's allowed vals. Allowed: ${available || "none"}.`);
-  }
+  await requireAllowed(val);
 
   const config = await readValConfig(val);
   if (!config) throw missingConfigError(val);

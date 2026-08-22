@@ -54,7 +54,7 @@ export async function introspect(
   return { schema: parseSchema(answer), path: entry.path };
 }
 
-export function pickHttpFile(files: ValFile[]): ValFile | undefined {
+function pickHttpFile(files: ValFile[]): ValFile | undefined {
   const httpFiles = files.filter((file) => file.type === "http");
   return httpFiles.find((file) => /^main\./.test(file.name)) ?? httpFiles[0];
 }
