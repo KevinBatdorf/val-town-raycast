@@ -1,4 +1,4 @@
-import { Action, ActionPanel, Form, Icon, Keyboard, Toast, showToast, useNavigation } from "@raycast/api";
+import { Action, ActionPanel, Color, Form, Icon, Keyboard, List, Toast, showToast, useNavigation } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { listFiles } from "../lib/api";
 import { canIntrospect, introspect, pickEntrypoint, RUNNABLE_TYPES } from "../lib/schema";
@@ -41,6 +41,8 @@ export function RegisterVal({
   const [config, setConfig] = useState<ValConfig>(preloaded ?? emptyValConfig());
   const [schema, setSchema] = useState(preloaded?.inputSchema ? JSON.stringify(preloaded.inputSchema, null, 2) : "");
   const [entrypoint, setEntrypoint] = useState(preloaded?.entrypoint ?? "");
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const { busy, run } = useBusy(BUSY.reading);
 
   /**
@@ -48,23 +50,28 @@ export function RegisterVal({
    * read alongside it only to prefill the entrypoint; the value is validated again on save.
    */
   useEffect(() => {
-    void run(BUSY.reading, async () => {
-      // A failed config read must fail the screen: saving defaults over it would destroy the config.
-      const [existing, listed] = await Promise.all([
-        known ? Promise.resolve(preloaded) : readValConfig(identifier),
-        listFiles(identifier)
-          .then(({ files }) => files)
-          .catch(() => []),
-      ]);
+    setLoadFailed(false);
+    void (async () => {
+      const loaded = await run(BUSY.reading, async () => {
+        // A failed config read must fail the screen: saving defaults over it would destroy the config.
+        const [existing, listed] = await Promise.all([
+          known ? Promise.resolve(preloaded) : readValConfig(identifier),
+          listFiles(identifier)
+            .then(({ files }) => files)
+            .catch(() => []),
+        ]);
 
-      if (existing) {
-        setConfig(existing);
-        setSchema(existing.inputSchema ? JSON.stringify(existing.inputSchema, null, 2) : "");
-      }
+        if (existing) {
+          setConfig(existing);
+          setSchema(existing.inputSchema ? JSON.stringify(existing.inputSchema, null, 2) : "");
+        }
 
-      setEntrypoint(existing?.entrypoint ?? pickEntrypoint(listed)?.path ?? "");
-    });
-  }, []);
+        setEntrypoint(existing?.entrypoint ?? pickEntrypoint(listed)?.path ?? "");
+      });
+
+      if (!loaded) setLoadFailed(true);
+    })();
+  }, [attempt]);
 
   async function generate() {
     let takesNothing = false;
@@ -139,6 +146,24 @@ export function RegisterVal({
   }
 
   if (busy) return <Working busy={busy} navigationTitle={identifier} />;
+
+  // Rendering the form here would offer a save that destroys the config it could not read.
+  if (loadFailed) {
+    return (
+      <List navigationTitle={identifier}>
+        <List.EmptyView
+          icon={{ source: Icon.Warning, tintColor: Color.Red }}
+          title="Could not load this val's configuration"
+          description="Nothing was changed."
+          actions={
+            <ActionPanel>
+              <Action title="Try Again" icon={Icon.ArrowClockwise} onAction={() => setAttempt((n) => n + 1)} />
+            </ActionPanel>
+          }
+        />
+      </List>
+    );
+  }
 
   return (
     <Form

@@ -70,7 +70,9 @@ export function ValDetail({ identifier }: { identifier: string }) {
   const detail = data?.detail ?? cachedVal(identifier)?.detail;
   const config = data?.config ?? null;
   const isTool = data?.entry !== undefined;
-  const argumentCount = Object.keys(config?.inputSchema?.properties ?? {}).length;
+  const inputEntries = Object.entries(config?.inputSchema?.properties ?? {}).map(
+    ([key, value]) => [key, ((value as { type?: string }).type ?? "any") as string] as const,
+  );
 
   const privacy = summary?.privacy ?? detail?.privacy;
   const appAccess = summary?.httpPrivacy ?? detail?.httpPrivacy;
@@ -166,20 +168,9 @@ export function ValDetail({ identifier }: { identifier: string }) {
            * Unlike a list row, this pane states the whole picture: no config says nothing at all,
            * an enabled val says so and whether it stops to ask, and a disabled one says only that.
            */}
-          {config ? (
+          {isTool && !config ? (
             <Detail.Metadata.TagList title="AI Agent Access">
-              {config.active ? (
-                <>
-                  <Detail.Metadata.TagList.Item text="ai" color={Color.Purple} />
-                  {config.confirm ? (
-                    <Detail.Metadata.TagList.Item text="must confirm" color={Color.Orange} />
-                  ) : (
-                    <Detail.Metadata.TagList.Item text="no confirm" color={Color.SecondaryText} />
-                  )}
-                </>
-              ) : (
-                <Detail.Metadata.TagList.Item text="disabled" color={Color.SecondaryText} />
-              )}
+              <Detail.Metadata.TagList.Item text="config unreadable" color={Color.Red} />
             </Detail.Metadata.TagList>
           ) : null}
           {config ? (
@@ -188,11 +179,17 @@ export function ValDetail({ identifier }: { identifier: string }) {
               text={config.description ?? `The val's own: ${description ?? "none"}`}
             />
           ) : null}
+          {config ? <Detail.Metadata.Label title="Confirm Before Run" text={config.confirm ? "Yes" : "No"} /> : null}
           {config ? (
-            <Detail.Metadata.Label
-              title="Arguments"
-              text={argumentCount ? `${argumentCount} input${argumentCount === 1 ? "" : "s"}` : "none"}
-            />
+            inputEntries.length > 0 ? (
+              <Detail.Metadata.TagList title="Inputs">
+                {inputEntries.map(([key, type]) => (
+                  <Detail.Metadata.TagList.Item key={key} text={`${key}:${type}`} />
+                ))}
+              </Detail.Metadata.TagList>
+            ) : (
+              <Detail.Metadata.Label title="Inputs" text="none" />
+            )
           ) : null}
           {config ? (
             <Detail.Metadata.Label title="Entrypoint" text={config.entrypoint ?? "resolved at run time"} />

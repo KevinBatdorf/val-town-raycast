@@ -58,13 +58,17 @@ async function rpc(method: string, params: unknown, signal?: AbortSignal): Promi
 
 type ToolCallResult = {
   content?: { type: string; text?: string }[];
+  /** The machine-readable result. The text part can be prose (get_val_detail's is), this cannot. */
+  structuredContent?: unknown;
   isError?: boolean;
 };
 
-/** Every tool this extension calls answers JSON, so non-JSON output is a failure, not a format. */
 export async function callTool<T>(name: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
-  const text = await callToolText(name, args, signal);
+  const result = await callToolResult(name, args, signal);
 
+  if (result.structuredContent !== undefined) return result.structuredContent as T;
+
+  const text = result.content?.find((part) => part.type === "text")?.text ?? "";
   // Handing back undefined here renders as an empty view with nothing to explain it.
   if (!text) throw new McpError(`${name} returned nothing`);
 
@@ -77,14 +81,20 @@ export async function callTool<T>(name: string, args: Record<string, unknown> = 
 
 /** For a tool whose success is an empty response, where no body is the expected answer. */
 export async function callToolVoid(name: string, args: Record<string, unknown> = {}): Promise<void> {
-  await callToolText(name, args);
+  await callToolResult(name, args);
 }
 
-async function callToolText(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
+async function callToolResult(
+  name: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<ToolCallResult> {
   const result = (await rpc("tools/call", { name, arguments: args }, signal)) as ToolCallResult;
-  const text = result.content?.find((part) => part.type === "text")?.text ?? "";
-  if (result.isError) throw new McpError(extractErrorMessage(text) ?? `${name} failed`);
-  return text;
+  if (result.isError) {
+    const text = result.content?.find((part) => part.type === "text")?.text ?? "";
+    throw new McpError(extractErrorMessage(text) ?? `${name} failed`);
+  }
+  return result;
 }
 
 function extractErrorMessage(text: string): string | undefined {
