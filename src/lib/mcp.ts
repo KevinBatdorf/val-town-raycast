@@ -47,6 +47,13 @@ async function rpc(method: string, params: unknown, signal?: AbortSignal): Promi
 
   const body = await response.text();
 
+  if (response.status >= 500) {
+    throw new McpError(
+      `Val Town's API is having trouble (HTTP ${response.status}). Try again shortly.`,
+      response.status,
+    );
+  }
+
   if (!response.ok) {
     throw new McpError(body.slice(0, 400) || `Val Town returned ${response.status}`, response.status);
   }
