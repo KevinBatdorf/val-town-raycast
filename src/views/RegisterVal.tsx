@@ -131,8 +131,8 @@ export function RegisterVal({
         inputSchema,
         entrypoint: wanted,
         description: values.description.trim() || null,
-        // Saving this form is what enables a val; there is no separate switch here.
-        active: true,
+        // Only the explicit enable flow touches AI access; a plain configure preserves it.
+        active: register ? true : config.active,
         confirm: values.confirm,
       });
 

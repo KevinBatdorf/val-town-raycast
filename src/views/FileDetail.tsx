@@ -1,7 +1,7 @@
 import { Action, ActionPanel, Color, Detail, Icon, Keyboard } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { endpointOf, readFile, webUrlFor } from "../lib/api";
-import { codeBlock, errorMessage, fileIcon, formatDateTime } from "../lib/format";
+import { codeBlock, errorMessage, fileIcon, formatRelative } from "../lib/format";
 import type { ValFile } from "../lib/types";
 import { LogList } from "./LogList";
 import { RunResult } from "./RunResult";
@@ -34,7 +34,7 @@ export function FileDetail({ val, branch, file }: { val: string; branch: string;
             />
           </Detail.Metadata.TagList>
           <Detail.Metadata.Label title="Version" text={`v${file.version}`} />
-          <Detail.Metadata.Label title="Updated" text={formatDateTime(file.updatedAt)} />
+          <Detail.Metadata.Label title="Updated" text={formatRelative(file.updatedAt)} />
           <Detail.Metadata.Label title="Branch" text={branch} />
           {endpoint ? <Detail.Metadata.Link title="Endpoint" target={endpoint} text={new URL(endpoint).host} /> : null}
         </Detail.Metadata>

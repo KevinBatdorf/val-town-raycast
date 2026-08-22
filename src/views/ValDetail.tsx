@@ -12,7 +12,7 @@ import {
 } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { getValDetail, listVals, setPrivacy, webUrlFor } from "../lib/api";
-import { appAccessColor, errorMessage, formatDateTime, privacyColor } from "../lib/format";
+import { appAccessColor, errorMessage, formatRelative, privacyColor } from "../lib/format";
 import { cacheVal, cachedReadme, cachedVal } from "../lib/cache";
 import { loadReadme } from "../lib/readme";
 import { loadState } from "../lib/store";
@@ -22,6 +22,7 @@ import { BlobList } from "./BlobList";
 import { FileList } from "./FileList";
 import { HistoryList } from "./HistoryList";
 import { RegisterVal } from "./RegisterVal";
+import { RunVal } from "./RunVal";
 import { SqliteQuery } from "./SqliteQuery";
 
 export function ValDetail({ identifier }: { identifier: string }) {
@@ -37,24 +38,20 @@ export function ValDetail({ identifier }: { identifier: string }) {
        */
       const [summaries, detail, state] = await Promise.all([
         listVals({ name: val.split("/")[1] }),
-        // Reported rather than swallowed: a silent null here reads as "this val has no branches".
-        getValDetail(val).then(
-          (result) => ({ result, error: null as string | null }),
-          (failure: unknown) => ({ result: null, error: errorMessage(failure) }),
-        ),
+        getValDetail(val).catch(() => null),
         loadState(),
       ]);
 
       const summary = summaries.vals.find((candidate) => candidate.identifier === val);
-      const config = state.tools[val] ? await readValConfig(val).catch(() => null) : null;
+      const config = await readValConfig(val).catch(() => null);
 
-      if (detail.result) {
-        const branches = detail.result.branches?.items ?? [];
+      if (detail) {
+        const branches = detail.branches?.items ?? [];
         const main = branches.find((branch) => branch.name === "main") ?? branches[0];
-        cacheVal(val, { version: main?.version ?? -1, detail: detail.result });
+        cacheVal(val, { version: main?.version ?? -1, detail });
       }
 
-      return { summary, detail: detail.result, detailError: detail.error, entry: state.tools[val], config };
+      return { summary, detail, entry: state.tools[val], config };
     },
     [identifier],
   );
@@ -76,9 +73,9 @@ export function ValDetail({ identifier }: { identifier: string }) {
 
   const privacy = summary?.privacy ?? detail?.privacy;
   const appAccess = summary?.httpPrivacy ?? detail?.httpPrivacy;
-  const createdAt = summary?.createdAt ?? detail?.createdAt;
   const webUrl = summary?.links.html ?? detail?.htmlUrl ?? webUrlFor(identifier);
   const branches = detail?.branches?.items ?? [];
+  const updatedAt = (branches.find((branch) => branch.name === "main") ?? branches[0])?.updatedAt;
   const branchCount = detail?.branches?.count ?? branches.length;
   const branch = branches[0]?.name ?? "main";
 
@@ -141,28 +138,20 @@ export function ValDetail({ identifier }: { identifier: string }) {
       markdown={body}
       metadata={
         <Detail.Metadata>
-          <Detail.Metadata.Link title="Val Town" target={webUrl} text="Open" />
+          <Detail.Metadata.Link title="Val Town" target={webUrl} text="Open in Browser" />
           <Detail.Metadata.Label title="Name" text={name} />
           {description ? <Detail.Metadata.Label title="Description" text={description} /> : null}
-          <Detail.Metadata.Label title="Val" text={identifier} />
-          <Detail.Metadata.TagList title="Code">
+          <Detail.Metadata.TagList title="Details">
             <Detail.Metadata.TagList.Item
               text={privacy ?? "unknown"}
               color={privacy ? privacyColor(privacy) : undefined}
             />
+            {config?.active ? <Detail.Metadata.TagList.Item text="ai" color={Color.Purple} /> : null}
+            {appAccess === "restricted" ? (
+              <Detail.Metadata.TagList.Item text="app: restricted" color={appAccessColor(appAccess)} />
+            ) : null}
+            {updatedAt ? <Detail.Metadata.TagList.Item text={formatRelative(updatedAt)} color={Color.Blue} /> : null}
           </Detail.Metadata.TagList>
-          <Detail.Metadata.TagList title="App access">
-            <Detail.Metadata.TagList.Item
-              text={appAccess ?? "unknown"}
-              color={appAccess ? appAccessColor(appAccess) : undefined}
-            />
-          </Detail.Metadata.TagList>
-          {data?.detailError ? (
-            <Detail.Metadata.Label title="Branches" text={`unavailable — ${data.detailError}`} />
-          ) : (
-            <Detail.Metadata.Label title="Branches" text={`${branchCount}`} />
-          )}
-          <Detail.Metadata.Label title="Created" text={createdAt ? formatDateTime(createdAt) : "unknown"} />
           <Detail.Metadata.Separator />
           {/*
            * Unlike a list row, this pane states the whole picture: no config says nothing at all,
@@ -175,7 +164,7 @@ export function ValDetail({ identifier }: { identifier: string }) {
           ) : null}
           {config ? (
             <Detail.Metadata.Label
-              title="Prompt"
+              title="AI Agent Access"
               text={config.description ?? `The val's own: ${description ?? "none"}`}
             />
           ) : null}
@@ -200,6 +189,22 @@ export function ValDetail({ identifier }: { identifier: string }) {
         <ActionPanel>
           <ActionPanel.Section title="Data">
             <Action.Push title="Files" icon={Icon.Folder} target={<FileList val={identifier} branch={branch} />} />
+            {config ? (
+              <Action.Push
+                title="Run Val"
+                icon={Icon.Play}
+                shortcut={Keyboard.Shortcut.Common.Refresh}
+                target={<RunVal identifier={identifier} config={config} />}
+              />
+            ) : (
+              <Action
+                title="Run Val"
+                icon={Icon.Play}
+                shortcut={Keyboard.Shortcut.Common.Refresh}
+                // Running needs the config (entrypoint, inputs), so the first run goes through setup.
+                onAction={() => configure(!isTool)}
+              />
+            )}
             <Action.Push
               title="History"
               icon={Icon.Clock}
@@ -243,16 +248,31 @@ export function ValDetail({ identifier }: { identifier: string }) {
           </ActionPanel.Section>
 
           <ActionPanel.Section title="AI Agent Access">
-            {/* Everything but Configure needs an enabled val: enabling happens by saving the config. */}
             <Action
-              title="Configure"
+              title="Configure Val Run"
               icon={Icon.Pencil}
               shortcut={{ modifiers: ["cmd"], key: "t" }}
-              onAction={() => configure(!isTool)}
+              onAction={() => configure(false)}
             />
+            {!isTool ? (
+              <Action
+                title="Enable AI Agent Access"
+                icon={Icon.CheckCircle}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+                onAction={() => configure(true)}
+              />
+            ) : null}
+            {isTool && config && !config.active ? (
+              <Action
+                title="Enable AI Agent Access"
+                icon={Icon.CheckCircle}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+                onAction={() => updateConfig({ active: true }, "Enabling", "Enabled")}
+              />
+            ) : null}
             {isTool && config?.active ? (
               <Action
-                title="Disable"
+                title="Disable AI Agent Access"
                 icon={Icon.Circle}
                 shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
                 onAction={() => updateConfig({ active: false }, "Disabling", "Disabled")}

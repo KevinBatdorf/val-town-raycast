@@ -13,7 +13,7 @@ export async function addTool(identifier: string): Promise<ExtensionState> {
   }));
 }
 
-type ExecutionResult = {
+export type ExecutionResult = {
   ok: boolean;
   via: "endpoint" | "run_file";
   status?: number;

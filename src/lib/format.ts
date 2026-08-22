@@ -68,6 +68,30 @@ export function formatDateTime(value: string | undefined): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+const RELATIVE_STEPS: [limit: number, divisor: number, unit: Intl.RelativeTimeFormatUnit][] = [
+  [60, 1, "second"],
+  [3600, 60, "minute"],
+  [86400, 3600, "hour"],
+  [604800, 86400, "day"],
+  [2629800, 604800, "week"],
+  [31557600, 2629800, "month"],
+  [Infinity, 31557600, "year"],
+];
+
+export function formatRelative(value: string | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const seconds = (Date.now() - date.getTime()) / 1000;
+  if (seconds < 60) return "less than a minute ago";
+
+  const formatter = new Intl.RelativeTimeFormat("en", { numeric: "always" });
+  const [, divisor, unit] =
+    RELATIVE_STEPS.find(([limit]) => seconds < limit) ?? RELATIVE_STEPS[RELATIVE_STEPS.length - 1];
+  return formatter.format(-Math.floor(seconds / divisor), unit);
+}
+
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;

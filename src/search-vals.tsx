@@ -177,16 +177,31 @@ export default function SearchVals() {
         </ActionPanel.Section>
 
         <ActionPanel.Section title="AI Agent Access">
-          {/* Everything but Configure needs an enabled val: enabling happens by saving the config. */}
           <Action
-            title="Configure"
+            title="Configure Val Run"
             icon={Icon.Pencil}
             shortcut={{ modifiers: ["cmd"], key: "t" }}
-            onAction={() => configure(identifier, !isTool, val?.description)}
+            onAction={() => configure(identifier, false, val?.description)}
           />
+          {!isTool ? (
+            <Action
+              title="Enable AI Agent Access"
+              icon={Icon.CheckCircle}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+              onAction={() => configure(identifier, true, val?.description)}
+            />
+          ) : null}
+          {isTool && config && !config.active ? (
+            <Action
+              title="Enable AI Agent Access"
+              icon={Icon.CheckCircle}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+              onAction={() => updateConfig(identifier, config, { active: true })}
+            />
+          ) : null}
           {isTool && config?.active ? (
             <Action
-              title="Disable"
+              title="Disable AI Agent Access"
               icon={Icon.Circle}
               shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
               onAction={() => updateConfig(identifier, config, { active: false })}
