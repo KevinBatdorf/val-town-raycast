@@ -84,6 +84,7 @@ export function ValDetail({ identifier }: { identifier: string }) {
       <RegisterVal
         identifier={identifier}
         register={register}
+        member={isTool}
         preloaded={register ? undefined : config}
         valDescription={summary?.description ?? detail?.description}
         onSaved={() => mutate()}
@@ -205,6 +206,12 @@ export function ValDetail({ identifier }: { identifier: string }) {
                 onAction={() => configure(!isTool)}
               />
             )}
+            <Action
+              title="Configure Val"
+              icon={Icon.Pencil}
+              shortcut={{ modifiers: ["cmd"], key: "t" }}
+              onAction={() => configure(false)}
+            />
             <Action.Push
               title="History"
               icon={Icon.Clock}
@@ -248,12 +255,6 @@ export function ValDetail({ identifier }: { identifier: string }) {
           </ActionPanel.Section>
 
           <ActionPanel.Section title="AI Agent Access">
-            <Action
-              title="Configure Val Run"
-              icon={Icon.Pencil}
-              shortcut={{ modifiers: ["cmd"], key: "t" }}
-              onAction={() => configure(false)}
-            />
             {!isTool ? (
               <Action
                 title="Enable AI Agent Access"

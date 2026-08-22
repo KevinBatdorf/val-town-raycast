@@ -1,3 +1,4 @@
+import { requireAllowed } from "../lib/allowed";
 import { endpointOf, listFiles, readFile } from "../lib/api";
 import { loadState } from "../lib/store";
 import { readValConfig } from "../lib/valconfig";
@@ -11,6 +12,7 @@ type Input = {
 
 export default async function getValInfo(input: Input) {
   const identifier = await resolveIdentifier(input.val);
+  await requireAllowed(identifier);
 
   if (input.path) {
     const file = await readFile(identifier, input.path);

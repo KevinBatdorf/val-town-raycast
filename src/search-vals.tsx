@@ -9,6 +9,7 @@ import { loadState, normalizeState, type ExtensionState } from "./lib/store";
 import type { Privacy, ValSummary } from "./lib/types";
 import { readConfigs, readValConfig, writeValConfig, type ValConfig } from "./lib/valconfig";
 import { RegisterVal } from "./views/RegisterVal";
+import { RunVal } from "./views/RunVal";
 import { ValDetail } from "./views/ValDetail";
 
 type Collection = "vals" | "tools";
@@ -99,6 +100,7 @@ export default function SearchVals() {
       <RegisterVal
         identifier={identifier}
         register={register}
+        member={identifier in tools}
         preloaded={configs[identifier]}
         valDescription={valDescription}
         onSaved={(next) => {
@@ -157,6 +159,27 @@ export default function SearchVals() {
       <ActionPanel>
         <ActionPanel.Section>
           <Action.Push title="Open Val" icon={Icon.ChevronRight} target={<ValDetail identifier={identifier} />} />
+          {config ? (
+            <Action.Push
+              title="Run Val"
+              icon={Icon.Play}
+              shortcut={Keyboard.Shortcut.Common.Refresh}
+              target={<RunVal identifier={identifier} config={config} />}
+            />
+          ) : (
+            <Action
+              title="Run Val"
+              icon={Icon.Play}
+              shortcut={Keyboard.Shortcut.Common.Refresh}
+              onAction={() => configure(identifier, !isTool, val?.description)}
+            />
+          )}
+          <Action
+            title="Configure Val"
+            icon={Icon.Pencil}
+            shortcut={{ modifiers: ["cmd"], key: "t" }}
+            onAction={() => configure(identifier, false, val?.description)}
+          />
           <Action.OpenInBrowser title="Open on Val Town" url={val?.links.html ?? webUrlFor(identifier)} />
           {val ? (
             <ActionPanel.Submenu title="Change Visibility" icon={Icon.Eye}>
@@ -177,12 +200,6 @@ export default function SearchVals() {
         </ActionPanel.Section>
 
         <ActionPanel.Section title="AI Agent Access">
-          <Action
-            title="Configure Val Run"
-            icon={Icon.Pencil}
-            shortcut={{ modifiers: ["cmd"], key: "t" }}
-            onAction={() => configure(identifier, false, val?.description)}
-          />
           {!isTool ? (
             <Action
               title="Enable AI Agent Access"

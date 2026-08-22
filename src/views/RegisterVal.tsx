@@ -20,6 +20,7 @@ const BUSY = {
 export function RegisterVal({
   identifier,
   register,
+  member,
   preloaded,
   valDescription,
   onSaved,
@@ -30,6 +31,8 @@ export function RegisterVal({
    * escaping this screen has to leave the collection exactly as it was.
    */
   register: boolean;
+  /** Whether the val is already in the allow list, so the checkbox can show the real state. */
+  member: boolean;
   /** Read by the list on selection. Undefined means it has to be read here. */
   preloaded?: ValConfig | null;
   /** The val's own description, offered as the placeholder and used when this field is left empty. */
@@ -41,6 +44,7 @@ export function RegisterVal({
   const [config, setConfig] = useState<ValConfig>(preloaded ?? emptyValConfig());
   const [schema, setSchema] = useState(preloaded?.inputSchema ? JSON.stringify(preloaded.inputSchema, null, 2) : "");
   const [entrypoint, setEntrypoint] = useState(preloaded?.entrypoint ?? "");
+  const [aiAccess, setAiAccess] = useState(register || (member && (preloaded?.active ?? false)));
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const { busy, run } = useBusy(BUSY.reading);
@@ -64,6 +68,7 @@ export function RegisterVal({
         if (existing) {
           setConfig(existing);
           setSchema(existing.inputSchema ? JSON.stringify(existing.inputSchema, null, 2) : "");
+          if (!register) setAiAccess(member && existing.active);
         }
 
         setEntrypoint(existing?.entrypoint ?? pickEntrypoint(listed)?.path ?? "");
@@ -131,13 +136,12 @@ export function RegisterVal({
         inputSchema,
         entrypoint: wanted,
         description: values.description.trim() || null,
-        // Only the explicit enable flow touches AI access; a plain configure preserves it.
-        active: register ? true : config.active,
+        active: aiAccess,
         confirm: values.confirm,
       });
 
       // Membership is granted here and nowhere else, so a config always lands before the entry.
-      if (register) next = await addTool(identifier);
+      if (aiAccess && !member) next = await addTool(identifier);
     });
 
     if (!saved) return;
@@ -170,7 +174,7 @@ export function RegisterVal({
       navigationTitle={identifier}
       actions={
         <ActionPanel>
-          <Action.SubmitForm title={register ? "Enable" : "Save Configuration"} icon={Icon.Check} onSubmit={submit} />
+          <Action.SubmitForm title="Save" icon={Icon.Check} onSubmit={submit} />
           {canIntrospect() ? (
             <Action
               title="Ask AI to Generate"
@@ -188,20 +192,13 @@ export function RegisterVal({
         </ActionPanel>
       }
     >
-      <Form.TextField
-        id="description"
-        title="Description"
-        value={config.description ?? ""}
-        onChange={(description) => setConfig((current) => ({ ...current, description }))}
-        placeholder={valDescription ?? undefined}
-        info="What the model reads when deciding whether to call this val. Leave empty to use the val's own description."
-      />
       <Form.Checkbox
-        id="confirm"
-        label="Ask before running"
-        value={config.confirm}
-        onChange={(confirm) => setConfig((current) => ({ ...current, confirm }))}
-        info="Off means Raycast AI runs this val without stopping to check."
+        id="aiAccess"
+        title="Raycast AI"
+        label="Allow AI Access"
+        value={aiAccess}
+        onChange={setAiAccess}
+        info="Whether Raycast AI can see and run this val. Running it yourself never needs this. Additional agent settings below."
       />
       <Form.Separator />
       <Form.TextField
@@ -224,6 +221,26 @@ export function RegisterVal({
       />
       {canIntrospect() ? <Form.Description text="⌘G asks Raycast AI to read the val's code and fill this in." /> : null}
       <Form.Description text="⌘O opens worked examples in the readme." />
+      <Form.Separator />
+      <Form.Description
+        title="AI Agent Settings"
+        text="How Raycast AI sees this val. Running it yourself needs none of it."
+      />
+      <Form.TextField
+        id="description"
+        title="Description"
+        value={config.description ?? ""}
+        onChange={(description) => setConfig((current) => ({ ...current, description }))}
+        placeholder={valDescription ?? undefined}
+        info="What the model reads when deciding whether to call this val. Leave empty to use the val's own description."
+      />
+      <Form.Checkbox
+        id="confirm"
+        label="Ask before running"
+        value={config.confirm}
+        onChange={(confirm) => setConfig((current) => ({ ...current, confirm }))}
+        info="Off means Raycast AI runs this val without stopping to check."
+      />
     </Form>
   );
 }
