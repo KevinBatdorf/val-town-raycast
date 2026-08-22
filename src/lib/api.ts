@@ -1,6 +1,7 @@
 import { callTool, callToolVoid } from "./mcp";
 import type {
   Privacy,
+  FindSkillsResponse,
   HistoryResponse,
   IntervalSettings,
   ListBlobsResponse,
@@ -37,6 +38,10 @@ export function listVals(options: ListValsOptions = {}, signal?: AbortSignal) {
  */
 export function setPrivacy(val: string, privacy: Privacy) {
   return callToolVoid("update_val", { val, privacy });
+}
+
+export function findSkills(query: string, limit = 5, signal?: AbortSignal) {
+  return callTool<FindSkillsResponse>("find_val_town_skills", { query, limit }, signal);
 }
 
 export function getValDetail(val: string, signal?: AbortSignal) {

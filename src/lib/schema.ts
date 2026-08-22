@@ -1,7 +1,7 @@
 import { AI, environment } from "@raycast/api";
 import { listFiles, readFile } from "./api";
 import type { JsonSchema } from "./store";
-import type { ValFile } from "./types";
+import type { FileType, ValFile } from "./types";
 
 export function canIntrospect(): boolean {
   return environment.canAccess(AI);
@@ -19,20 +19,39 @@ Rules:
 Source:
 `;
 
+/** A plain `file` is data; `run_file` refuses it. */
+export const RUNNABLE_TYPES: FileType[] = ["http", "script", "interval", "email"];
+
+/**
+ * Which file a val is called at when its config does not say. An http file wins because it can take
+ * arguments; `main.*` wins among those because that is the convention. Undefined means the val has
+ * nothing callable at all.
+ */
+export function pickEntrypoint(files: ValFile[]): ValFile | undefined {
+  return pickHttpFile(files) ?? files.find((file) => RUNNABLE_TYPES.includes(file.type));
+}
+
 /**
  * The model reads the code because that is where the interface is; a README rarely repeats it.
- * Null means the val takes nothing — a val with no http file has no request body to describe, which
- * is an answer rather than a failure.
+ * A given `entrypoint` is honoured; otherwise the file is resolved and reported back through `path`
+ * so the caller can fill the field. A null schema means the file takes nothing: a non-http file has
+ * no request body, and neither does a val with nothing callable — answers, not failures.
  */
-export async function introspect(val: string, signal?: AbortSignal): Promise<JsonSchema | null> {
+export async function introspect(
+  val: string,
+  entrypoint?: string,
+  signal?: AbortSignal,
+): Promise<{ schema: JsonSchema | null; path: string } | null> {
   const { files } = await listFiles(val, {}, signal);
-  const entry = pickHttpFile(files);
+  const entry = entrypoint ? files.find((file) => file.path === entrypoint) : pickEntrypoint(files);
+  if (entrypoint && !entry) throw new Error(`${val} has no file at ${entrypoint}.`);
   if (!entry) return null;
+  if (entry.type !== "http") return { schema: null, path: entry.path };
 
   const { content } = await readFile(val, entry.path, {}, signal);
   const answer = await AI.ask(`${PROMPT}${content.slice(0, 24000)}`, { creativity: 0 });
 
-  return parseSchema(answer);
+  return { schema: parseSchema(answer), path: entry.path };
 }
 
 export function pickHttpFile(files: ValFile[]): ValFile | undefined {

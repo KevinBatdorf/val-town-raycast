@@ -1,8 +1,7 @@
-import { Action, ActionPanel, Color, Detail, Icon, Toast, showToast, Keyboard } from "@raycast/api";
+import { Action, ActionPanel, Color, Detail, Icon, Keyboard } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { endpointOf, readFile, webUrlFor } from "../lib/api";
 import { codeBlock, errorMessage, fileIcon, formatDateTime } from "../lib/format";
-import { isWatched, loadState, mutateState } from "../lib/store";
 import type { ValFile } from "../lib/types";
 import { LogList } from "./LogList";
 import { RunResult } from "./RunResult";
@@ -17,34 +16,9 @@ export function FileDetail({ val, branch, file }: { val: string; branch: string;
     [val, file.path, branch],
   );
 
-  const watched = useCachedPromise(async (fileId: string) => isWatched(await loadState(), fileId), [file.id]);
-
   const markdown = error
     ? `## Could not read this file\n\n${errorMessage(error)}`
     : codeBlock(data?.content ?? "", file.path);
-
-  async function toggleWatch() {
-    const nextWatched = !watched.data;
-    const toast = await showToast({ style: Toast.Style.Animated, title: nextWatched ? "Watching" : "Unwatching" });
-    try {
-      await mutateState((state) => ({
-        ...state,
-        watchedFiles: nextWatched
-          ? [
-              ...state.watchedFiles.filter((entry) => entry.fileId !== file.id),
-              { val, fileId: file.id, path: file.path },
-            ]
-          : state.watchedFiles.filter((entry) => entry.fileId !== file.id),
-      }));
-      toast.style = Toast.Style.Success;
-      toast.title = nextWatched ? "Watching for errors" : "No longer watching";
-      watched.revalidate();
-    } catch (mutationError) {
-      toast.style = Toast.Style.Failure;
-      toast.title = "Could not save";
-      toast.message = errorMessage(mutationError);
-    }
-  }
 
   return (
     <Detail
@@ -63,12 +37,6 @@ export function FileDetail({ val, branch, file }: { val: string; branch: string;
           <Detail.Metadata.Label title="Updated" text={formatDateTime(file.updatedAt)} />
           <Detail.Metadata.Label title="Branch" text={branch} />
           {endpoint ? <Detail.Metadata.Link title="Endpoint" target={endpoint} text={new URL(endpoint).host} /> : null}
-          <Detail.Metadata.Separator />
-          <Detail.Metadata.Label
-            title="Error watch"
-            icon={watched.data ? Icon.BellDisabled : undefined}
-            text={watched.data ? "On" : "Off"}
-          />
         </Detail.Metadata>
       }
       actions={
@@ -116,12 +84,6 @@ export function FileDetail({ val, branch, file }: { val: string; branch: string;
             <Action.OpenInBrowser title="Edit in Val Town" url={webUrlFor(val, file.path)} />
             <Action.CopyToClipboard title="Copy Code" content={data?.content ?? ""} />
             {endpoint ? <Action.CopyToClipboard title="Copy Endpoint" content={endpoint} /> : null}
-            <Action
-              title={watched.data ? "Stop Watching for Errors" : "Watch for Errors"}
-              icon={watched.data ? Icon.BellDisabled : Icon.Bell}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "w" }}
-              onAction={toggleWatch}
-            />
           </ActionPanel.Section>
         </ActionPanel>
       }

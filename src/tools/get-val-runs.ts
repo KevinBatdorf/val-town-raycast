@@ -1,6 +1,6 @@
 import { getLogs, getTraces, listFiles } from "../lib/api";
 import { requireAllowed } from "../lib/allowed";
-import { pickEntrypoint } from "../lib/tools";
+import { pickEntrypoint } from "../lib/schema";
 import { readValConfig } from "../lib/valconfig";
 
 type Input = {

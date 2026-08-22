@@ -234,6 +234,7 @@ export function ValDetail({ identifier }: { identifier: string }) {
                 />
               ))}
             </ActionPanel.Submenu>
+            <Action.OpenInBrowser title="Open on Val Town" url={webUrl} />
           </ActionPanel.Section>
 
           <ActionPanel.Section title="AI Agent Access">
@@ -264,10 +265,6 @@ export function ValDetail({ identifier }: { identifier: string }) {
                 }
               />
             ) : null}
-          </ActionPanel.Section>
-
-          <ActionPanel.Section>
-            <Action.OpenInBrowser title="Open on Val Town" url={webUrl} />
           </ActionPanel.Section>
         </ActionPanel>
       }

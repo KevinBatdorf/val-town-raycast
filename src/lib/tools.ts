@@ -1,21 +1,8 @@
 import { getPreferenceValues } from "@raycast/api";
 import { endpointOf, getValDetail, listFiles, runFile } from "./api";
-import { pickHttpFile } from "./schema";
+import { pickEntrypoint } from "./schema";
 import { mutateState, type ExtensionState } from "./store";
-import type { FileType, ValFile } from "./types";
 import { type ValConfig } from "./valconfig";
-
-/** A plain `file` is data; `run_file` refuses it. */
-export const RUNNABLE_TYPES: FileType[] = ["http", "script", "interval", "email"];
-
-/**
- * Which file a val is called at when its config does not say. An http file wins because it can take
- * arguments; `main.*` wins among those because that is the convention. Undefined means the val has
- * nothing callable at all.
- */
-export function pickEntrypoint(files: ValFile[]): ValFile | undefined {
-  return pickHttpFile(files) ?? files.find((file) => RUNNABLE_TYPES.includes(file.type));
-}
 
 /** Membership only. The caller writes the val's config first, so nothing is defaulted here. */
 export async function addTool(identifier: string): Promise<ExtensionState> {

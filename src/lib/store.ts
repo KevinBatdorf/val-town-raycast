@@ -4,7 +4,7 @@ import { McpError } from "./mcp";
 
 const STATE_KEY = "raycast:tools.json";
 
-const STATE_VERSION = 6;
+const STATE_VERSION = 7;
 
 export type JsonSchema = {
   type?: string;
@@ -19,27 +19,16 @@ type ToolEntry = {
   addedAt: string;
 };
 
-type WatchedFile = {
-  val: string;
-  fileId: string;
-  path: string;
-};
-
 export type ExtensionState = {
   version: typeof STATE_VERSION;
   /** Keyed by `handle/valName`. This key set is the collection: nothing else decides membership. */
   tools: Record<string, ToolEntry>;
-  watchedFiles: WatchedFile[];
-  /** Newest failure the user acknowledged, per file, so a restart does not re-badge it. */
-  reportedFailures: Record<string, string>;
 };
 
 function emptyState(): ExtensionState {
   return {
     version: STATE_VERSION,
     tools: {},
-    watchedFiles: [],
-    reportedFailures: {},
   };
 }
 
@@ -106,8 +95,6 @@ export function normalizeState(stored: Record<string, unknown>): ExtensionState 
         { val: entry.val ?? identifier, addedAt: entry.addedAt ?? entry.derivedAt ?? new Date(0).toISOString() },
       ]),
     ),
-    watchedFiles: (stored.watchedFiles ?? []) as WatchedFile[],
-    reportedFailures: (stored.reportedFailures ?? {}) as Record<string, string>,
   };
 }
 
@@ -122,8 +109,4 @@ export async function mutateState(mutate: (state: ExtensionState) => ExtensionSt
   const next = mutate(await loadState());
   await saveState(next);
   return next;
-}
-
-export function isWatched(state: ExtensionState, fileId: string): boolean {
-  return state.watchedFiles.some((file) => file.fileId === fileId);
 }

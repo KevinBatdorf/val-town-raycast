@@ -1,9 +1,9 @@
 import { Action, ActionPanel, Form, Icon, Keyboard, Toast, showToast, useNavigation } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { listFiles } from "../lib/api";
-import { canIntrospect, introspect } from "../lib/schema";
+import { canIntrospect, introspect, pickEntrypoint, RUNNABLE_TYPES } from "../lib/schema";
 import { type ExtensionState } from "../lib/store";
-import { addTool, pickEntrypoint, RUNNABLE_TYPES } from "../lib/tools";
+import { addTool } from "../lib/tools";
 import { emptyValConfig, readValConfig, writeValConfig, type ValConfig } from "../lib/valconfig";
 import { Working, useBusy, type Busy } from "./Working";
 
@@ -69,10 +69,18 @@ export function RegisterVal({
     let takesNothing = false;
 
     const done = await run(BUSY.generating, async () => {
-      const schema = await introspect(identifier);
-      // No properties and no http file both mean the same thing, and the field says to leave it empty.
-      takesNothing = !schema || Object.keys(schema.properties ?? {}).length === 0;
-      setSchema(takesNothing ? "" : JSON.stringify(schema, null, 2));
+      // A typed entrypoint is used as-is; an empty field means the AI resolves the file and fills it in.
+      const result = await introspect(identifier, entrypoint.trim() || undefined);
+      if (!result) {
+        takesNothing = true;
+        setSchema("");
+        return;
+      }
+
+      setEntrypoint(result.path);
+      // No properties and no request body both mean the same thing, and the field says to leave it empty.
+      takesNothing = !result.schema || Object.keys(result.schema.properties ?? {}).length === 0;
+      setSchema(takesNothing ? "" : JSON.stringify(result.schema, null, 2));
     });
 
     // `run` hides its own toast before returning, so this one does not race it.
@@ -81,13 +89,7 @@ export function RegisterVal({
     }
   }
 
-  async function submit(values: {
-    schema: string;
-    entrypoint: string;
-    description: string;
-    active: boolean;
-    confirm: boolean;
-  }) {
+  async function submit(values: { schema: string; entrypoint: string; description: string; confirm: boolean }) {
     const wanted = values.entrypoint.trim();
     if (!wanted) {
       await showToast({ style: Toast.Style.Failure, title: "Name the file to call" });
@@ -121,7 +123,8 @@ export function RegisterVal({
         inputSchema,
         entrypoint: wanted,
         description: values.description.trim() || null,
-        active: values.active,
+        // Saving this form is what enables a val; there is no separate switch here.
+        active: true,
         confirm: values.confirm,
       });
 
@@ -166,12 +169,6 @@ export function RegisterVal({
         onChange={(description) => setConfig((current) => ({ ...current, description }))}
         placeholder={valDescription ?? undefined}
         info="What the model reads when deciding whether to call this val. Leave empty to use the val's own description."
-      />
-      <Form.Checkbox
-        id="active"
-        label="Active"
-        value={config.active}
-        onChange={(active) => setConfig((current) => ({ ...current, active }))}
       />
       <Form.Checkbox
         id="confirm"

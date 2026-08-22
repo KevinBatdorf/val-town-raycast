@@ -1,22 +1,42 @@
 # Val Town
 
-Browse your [Val Town](https://www.val.town) account from Raycast, and turn the vals you choose
-into tools Raycast AI can call.
-
-The extension **views**; val.town **edits**. Nothing here writes your code — the only things it
-changes are a val's two access settings and the config it stores alongside the val.
+Browse your [Val Town](https://www.val.town) account from Raycast, and allow Raycast AI to run the
+vals you choose.
 
 ## Setup
 
 Create a token at [val.town/settings/api](https://www.val.town/settings/api) and paste it into the
 extension's preferences.
 
+## The allow list
+
+Raycast AI can only run vals you have allowed. **Configure** (`⌘T`) on any val — in the list or on
+its own pane — opens the config screen, and the val joins the allow list when you save. Never
+before: backing out of the screen changes nothing.
+
+The config screen asks for a description for the model (leave it empty to use the val's own), whether
+to ask before running, the entrypoint file to call, and the arguments the val takes as a JSON Schema.
+With Raycast AI available, `⌘G` reads the entrypoint's code and drafts the schema — and fills in the
+entrypoint too when the field is empty. Correct anything it got wrong before saving.
+
+Once a val is allowed:
+
+- **Disable** (`⇧⌘A`) switches it off. It drops out of what the model can see; its settings keep, and
+  re-enabling goes back through **Configure** — save, and it is on again.
+- **Require Confirm** (`⇧⌘C`) makes Raycast AI stop and ask before each run. It is off when you first
+  allow a val, so nothing asks before running unless you say so.
+
+Beyond running, Raycast AI can also — on your request — read an allowed val's files and blobs, check
+its recent runs and failures, and load a skill of yours: a `skills/<name>/SKILL.md` file (with
+frontmatter) in any of your vals, whose instructions name vals to run.
+
 ## Commands
 
 ### Search Vals
 
-The only view command. The collection dropdown switches between **All Vals** and **Allowed** — the
-vals you have let Raycast AI call. Open a val to reach:
+The only view command. The collection dropdown switches between **All Vals** and **AI Agent
+Access** — the vals Raycast AI can run right now — and appears once at least one val is enabled.
+Open a val to reach:
 
 - **Files** — the file tree, with a read-only viewer for each file
 - **Logs** and **Traces** — per file, since that is where Val Town hangs them. Both cover the last
@@ -27,37 +47,8 @@ vals you have let Raycast AI call. Open a val to reach:
 - **SQLite** — the val's own database: tables, row previews, and read-only queries
 - **Blobs** — the val's own blob storage
 
-**AI agent access** is a val's one setting, with three states. A val starts with none of it:
-**Enable** (`⌘T`) opens the config screen, and the val joins the list when you save — never before,
-so backing out changes nothing. After that **Disable** / **Enable** (`⇧⌘A`) turns it off and on, and
-**Configure** reopens the config screen. A disabled val stays in the list and is hidden from the
-model; that is the off state, so there is nothing to remove.
-
-Nothing here creates anything. Raycast's tools are fixed at build time — *List Vals*, *Read Val* and
-*Run Val* — and the list only decides which of your vals those three are willing to touch. That is
-also why there is no global switch: a val you never enable is not refused, it simply is not one of
-the user's tools as far as *List Vals* is concerned.
-
-The Allowed collection is listed from the list itself rather than from search results, so a val that
-was deleted or renamed on Val Town still appears rather than vanishing silently.
-
-**Nothing asks before running unless you say so.** Ask-before-running is a switch on each val,
-off when you first allow it.
-
-### Errors
-
-An optional menu bar item, shipped off by default. Turn it on, then use **Watch for Errors** on any
-file. It checks each watched file's traces once a minute and badges the count of failures you have
-not acknowledged.
-
-## Allowing a val as a tool
-
-**Enable** (`⌘T`) on any val row, or on the val's own pane. That opens the config screen; the val
-joins the list only when you save, so escaping the screen changes nothing.
-
-The screen asks for the arguments the val takes, as a JSON Schema, plus a description for the model
-and whether it should ask before running. With Raycast AI available, `⌘G` reads the val's code and
-drafts the schema for you — correct anything it got wrong before saving.
+The AI Agent Access collection is listed from the allow list itself rather than from search results,
+so a val that was deleted or renamed on Val Town still appears rather than vanishing silently.
 
 ## Argument examples
 
@@ -159,12 +150,12 @@ an empty body.
 
 ## Where extension state lives
 
-Which vals you allowed and the error watch list are stored as `raycast:tools.json` in your
+Which vals you allowed are stored as `raycast:tools.json` in your
 **account-global blob storage**.
-Everything about *how to call a particular val* lives in that val instead.
+Everything about _how to call a particular val_ lives in that val instead.
 
-Listing costs one call no matter how many vals you have allowed: the model gets identifiers and
-descriptions, then reads the config for the one val it is about to run.
+The model is handed every allowed val's description and arguments together, and reads nothing else
+until you ask it to run one.
 
 Not LocalStorage, which is device-local and not covered by Raycast Cloud Sync, so the collection
 would not follow you between machines. Not a dedicated val either, because a free Val Town account
