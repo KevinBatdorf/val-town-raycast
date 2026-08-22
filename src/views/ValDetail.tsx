@@ -49,7 +49,7 @@ export function ValDetail({ identifier }: { identifier: string }) {
       const config = state.tools[val] ? await readValConfig(val).catch(() => null) : null;
 
       if (detail.result) {
-        const branches = detail.result.branches.items;
+        const branches = detail.result.branches?.items ?? [];
         const main = branches.find((branch) => branch.name === "main") ?? branches[0];
         cacheVal(val, { version: main?.version ?? -1, detail: detail.result });
       }

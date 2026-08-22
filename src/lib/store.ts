@@ -70,7 +70,10 @@ async function fetchState(signal?: AbortSignal): Promise<ExtensionState> {
   try {
     return normalizeState(JSON.parse(raw) as Record<string, unknown>);
   } catch {
-    return emptyState();
+    // Never an empty state: the next mutation would save it and wipe the real collection.
+    throw new Error(
+      "Your Val Town extension state (raycast:tools.json) is not valid JSON. Fix or delete it on val.town.",
+    );
   }
 }
 

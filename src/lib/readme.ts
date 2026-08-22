@@ -39,7 +39,8 @@ export function prefetchVal(val: string): void {
     const detail = await getValDetail(val).catch(() => null);
     if (!detail) return;
 
-    const main = detail.branches.items.find((branch) => branch.name === "main") ?? detail.branches.items[0];
+    const items = detail.branches?.items ?? [];
+    const main = items.find((branch) => branch.name === "main") ?? items[0];
     const version = main?.version ?? -1;
 
     if (cachedVal(val)?.version !== version) {

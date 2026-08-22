@@ -49,8 +49,9 @@ export function RegisterVal({
    */
   useEffect(() => {
     void run(BUSY.reading, async () => {
+      // A failed config read must fail the screen: saving defaults over it would destroy the config.
       const [existing, listed] = await Promise.all([
-        known ? Promise.resolve(preloaded) : readValConfig(identifier).catch(() => null),
+        known ? Promise.resolve(preloaded) : readValConfig(identifier),
         listFiles(identifier)
           .then(({ files }) => files)
           .catch(() => []),

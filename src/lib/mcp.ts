@@ -61,7 +61,7 @@ type ToolCallResult = {
   isError?: boolean;
 };
 
-/** A few tools answer with prose rather than JSON, so a failed parse returns the raw text. */
+/** Every tool this extension calls answers JSON, so non-JSON output is a failure, not a format. */
 export async function callTool<T>(name: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
   const text = await callToolText(name, args, signal);
 
@@ -71,7 +71,7 @@ export async function callTool<T>(name: string, args: Record<string, unknown> = 
   try {
     return JSON.parse(text) as T;
   } catch {
-    return text as unknown as T;
+    throw new McpError(`${name} answered with something other than JSON: ${text.slice(0, 200)}`);
   }
 }
 

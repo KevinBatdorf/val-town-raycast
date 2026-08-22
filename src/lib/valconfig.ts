@@ -33,7 +33,7 @@ export async function readValConfig(val: string, signal?: AbortSignal): Promise<
   try {
     return { ...emptyValConfig(), ...(JSON.parse(raw) as ValConfig), version: 1 };
   } catch {
-    return null;
+    throw new Error(`${val}'s raycast:tool.json is not valid JSON. Fix or delete it on val.town.`);
   }
 }
 

@@ -63,7 +63,12 @@ export default function SearchVals() {
     const controller = new AbortController();
 
     void (async () => {
-      const fresh = await readConfigs(registered.split(","), controller.signal).catch(() => null);
+      const fresh = await readConfigs(registered.split(","), controller.signal).catch((sweepError: unknown) => {
+        if (!controller.signal.aborted) {
+          void showFailureToast(sweepError, { title: "Could not refresh val settings" });
+        }
+        return null;
+      });
       if (controller.signal.aborted || !fresh) return;
       setConfigs(fresh);
       cacheConfigs(fresh);
@@ -100,7 +105,14 @@ export default function SearchVals() {
           applyState(next);
           void readValConfig(identifier)
             .then((config) => rememberConfig(identifier, config))
-            .catch(() => undefined);
+            .catch(() =>
+              setConfigs((current) => {
+                // Pre-save values would misreport the save; the sweep repopulates a dropped row.
+                const rest = { ...current };
+                delete rest[identifier];
+                return rest;
+              }),
+            );
         }}
       />,
     );
