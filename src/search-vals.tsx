@@ -33,12 +33,8 @@ export default function SearchVals() {
   const [collection, setCollection] = useCachedState<Collection>("collection", "vals");
   const [configs, setConfigs] = useState<Configs>(cachedConfigs);
 
-  // DEBUG: temporary, to catch what re-renders the list while idle.
-  console.log("render", Date.now() % 100000);
-
   const { data, isLoading, error, revalidate, mutate } = useCachedPromise(
     async (text: string) => {
-      console.log("FETCH list_vals+state", Date.now() % 100000, JSON.stringify(text));
       const [{ vals }, state] = await Promise.all([listVals({ name: text || undefined }), loadState()]);
       return { vals, tools: state.tools };
     },
@@ -66,7 +62,6 @@ export default function SearchVals() {
     if (!registered) return;
     const controller = new AbortController();
 
-    console.log("SWEEP configs", Date.now() % 100000);
     void (async () => {
       const fresh = await readConfigs(registered.split(","), controller.signal).catch(() => null);
       if (controller.signal.aborted || !fresh) return;
@@ -232,8 +227,6 @@ export default function SearchVals() {
   const hasAllowed = reachable.length > 0;
   const showTools = hasAllowed && collection === "tools";
 
-  console.log("STATE", Date.now() % 100000, JSON.stringify({ collection, hasAllowed, showTools }));
-
   const toolRows = reachable
     .filter((identifier) => identifier.toLowerCase().includes(searchText.trim().toLowerCase()))
     .sort();
@@ -244,7 +237,6 @@ export default function SearchVals() {
       searchText={searchText}
       onSearchTextChange={setSearchText}
       onSelectionChange={(id) => {
-        console.log("SELECTION", Date.now() % 100000, id);
         if (id) prefetchReadme(id);
       }}
       throttle
@@ -254,10 +246,7 @@ export default function SearchVals() {
           <List.Dropdown
             tooltip="Collection"
             value={showTools ? "tools" : "vals"}
-            onChange={(value) => {
-              console.log("DROPDOWN onChange", Date.now() % 100000, JSON.stringify(value));
-              setCollection(value as Collection);
-            }}
+            onChange={(value) => setCollection(value as Collection)}
           >
             <List.Dropdown.Item title="All Vals" value="vals" icon={Icon.Code} />
             <List.Dropdown.Item title="AI Agent Access" value="tools" icon={Icon.Stars} />
