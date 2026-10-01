@@ -30,18 +30,35 @@ const listed = await check("list-tools", listTools);
 if (!listed) process.exit(1);
 
 // list-tools drops switched-off vals, which the read tools still accept.
-const [val] = Object.keys((await loadState()).tools);
-if (!val) {
+const vals = Object.keys((await loadState()).tools);
+if (vals.length === 0) {
   console.error(`FAIL  no val to read: ${listed.note}`);
   process.exit(1);
 }
 
-await check("get-val-info", () => getValInfo({ val }));
-await check("get-val-runs", () => getValRuns({ val }));
-const blobs = await check("read-val-blobs list", () => readValBlobs({ val }));
-const key = blobs?.blobs?.[0]?.key;
-if (key) await check("read-val-blobs read", () => readValBlobs({ val, key }));
+// Not every val has runs, blobs or a database, so one val that answers is enough.
+async function onAnyVal<T>(run: (val: string) => Promise<T>): Promise<T> {
+  let first: unknown;
+  for (const val of vals) {
+    try {
+      return await run(val);
+    } catch (error) {
+      first ??= error;
+    }
+  }
+  throw first;
+}
+
+await check("get-val-info", () => onAnyVal((val) => getValInfo({ val })));
+await check("get-val-runs", () => onAnyVal((val) => getValRuns({ val })));
+await check("read-val-blobs", () =>
+  onAnyVal(async (val) => {
+    const key = (await readValBlobs({ val })).blobs?.[0]?.key;
+    if (!key) throw new Error("No allowed val has a blob to read");
+    return readValBlobs({ val, key });
+  }),
+);
 await check("load-skill", () => loadSkill({ query: "sqlite" }));
-await check("sqlite", () => sqliteExecute(val, "SELECT 1"));
+await check("sqlite", () => onAnyVal((val) => sqliteExecute(val, "SELECT 1")));
 
 process.exit(failed ? 1 : 0);
