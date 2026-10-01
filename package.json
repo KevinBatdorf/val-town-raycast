@@ -61,7 +61,7 @@
       "type": "password",
       "required": true,
       "title": "Val Town API Token",
-      "description": "Create one at val.town/settings/api",
+      "description": "Create one at val.town/settings/api with read and write on Vals, Blob storage and SQLite. With less, a val's runs, blobs and database won't load.",
       "placeholder": "vt_..."
     }
   ],
