@@ -22,9 +22,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: node scripts/probe.mjs
-        env:
-          VAL_TOWN_TOKEN: ${{ secrets.VAL_TOWN_TOKEN }}
       - run: npm run live-check
         env:
           VAL_TOWN_TOKEN: ${{ secrets.VAL_TOWN_TOKEN }}
