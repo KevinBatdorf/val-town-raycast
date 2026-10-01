@@ -1,4 +1,5 @@
 import { sqliteExecute } from "../src/lib/api";
+import { loadState } from "../src/lib/store";
 import getValInfo from "../src/tools/get-val-info";
 import getValRuns from "../src/tools/get-val-runs";
 import listTools from "../src/tools/list-tools";
@@ -28,7 +29,8 @@ async function check<T>(name: string, run: () => Promise<T>): Promise<T | undefi
 const listed = await check("list-tools", listTools);
 if (!listed) process.exit(1);
 
-const val = listed.tools[0]?.val;
+// list-tools drops switched-off vals, which the read tools still accept.
+const [val] = Object.keys((await loadState()).tools);
 if (!val) {
   console.error(`FAIL  no val to read: ${listed.note}`);
   process.exit(1);
