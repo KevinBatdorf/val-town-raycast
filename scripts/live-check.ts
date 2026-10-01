@@ -30,7 +30,7 @@ if (!listed) process.exit(1);
 
 const val = listed.tools[0]?.val;
 if (!val) {
-  console.error("FAIL  no allowed val to read. Add one to the extension's tools in Raycast.");
+  console.error(`FAIL  no val to read: ${listed.note}`);
   process.exit(1);
 }
 
